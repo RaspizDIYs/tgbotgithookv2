@@ -37,7 +37,7 @@ public class TelegramBotService
         }
     }
 
-    private async Task HandleMessageAsync(Message message)
+    public async Task HandleMessageAsync(Message message)
     {
         if (message.Text == null) return;
 

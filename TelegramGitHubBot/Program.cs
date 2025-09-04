@@ -44,7 +44,10 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
                 // Create GitHub service for the polling task
                 var githubClient = new GitHubClient(new ProductHeaderValue("TelegramGitHubBot"));
                 var githubPat = Environment.GetEnvironmentVariable("GITHUB_PAT");
-                githubClient.Credentials = new Credentials(githubPat.Trim());
+                if (!string.IsNullOrWhiteSpace(githubPat))
+                {
+                    githubClient.Credentials = new Credentials(githubPat.Trim());
+                }
                 var githubService = new GitHubService(githubClient);
                 var telegramService = new TelegramBotService(botClient, githubService);
 
