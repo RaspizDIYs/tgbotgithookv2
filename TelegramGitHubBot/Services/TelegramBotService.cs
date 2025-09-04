@@ -6,10 +6,21 @@ using Telegram.Bot.Types.ReplyMarkups;
 
 namespace TelegramGitHubBot.Services;
 
+public class NotificationSettings
+{
+    public bool PushNotifications { get; set; } = true;
+    public bool PullRequestNotifications { get; set; } = true;
+    public bool WorkflowNotifications { get; set; } = true;
+    public bool ReleaseNotifications { get; set; } = true;
+    public bool IssueNotifications { get; set; } = true;
+}
+
 public class TelegramBotService
 {
     private readonly ITelegramBotClient _botClient;
     private readonly GitHubService _gitHubService;
+    private readonly Dictionary<long, NotificationSettings> _chatSettings = new();
+    private readonly HashSet<string> _processedCallbacks = new();
 
     public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService)
     {
@@ -56,6 +67,16 @@ public class TelegramBotService
         // Игнорируем все остальные сообщения (не отвечаем)
     }
 
+    private NotificationSettings GetOrCreateSettings(long chatId)
+    {
+        if (!_chatSettings.TryGetValue(chatId, out var settings))
+        {
+            settings = new NotificationSettings();
+            _chatSettings[chatId] = settings;
+        }
+        return settings;
+    }
+
     private async Task HandleCommandAsync(long chatId, string command, string? username)
     {
         try
@@ -71,6 +92,11 @@ public class TelegramBotService
 
                 case "/help":
                     await SendHelpMessageAsync(chatId);
+                    break;
+
+                case "/settings":
+                case "/manage":
+                    await SendSettingsMessageAsync(chatId);
                     break;
 
                 case "/status":
@@ -162,6 +188,56 @@ public class TelegramBotService
         await _botClient.SendTextMessageAsync(
             chatId: chatId,
             text: message,
+            disableNotification: true,
+            replyMarkup: inlineKeyboard
+        );
+    }
+
+    private async Task SendSettingsMessageAsync(long chatId)
+    {
+        var settings = GetOrCreateSettings(chatId);
+
+        var message = @"⚙️ *Настройки уведомлений*
+
+Выберите типы уведомлений, которые хотите получать:";
+
+        var inlineKeyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData(
+                    $"{(settings.PushNotifications ? "✅" : "❌")} Коммиты",
+                    $"toggle:push:{chatId}"),
+                InlineKeyboardButton.WithCallbackData(
+                    $"{(settings.PullRequestNotifications ? "✅" : "❌")} PR/MR",
+                    $"toggle:pr:{chatId}")
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData(
+                    $"{(settings.WorkflowNotifications ? "✅" : "❌")} CI/CD",
+                    $"toggle:ci:{chatId}"),
+                InlineKeyboardButton.WithCallbackData(
+                    $"{(settings.ReleaseNotifications ? "✅" : "❌")} Релизы",
+                    $"toggle:release:{chatId}")
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData(
+                    $"{(settings.IssueNotifications ? "✅" : "❌")} Задачи",
+                    $"toggle:issue:{chatId}")
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/start")
+            }
+        });
+
+        await _botClient.SendTextMessageAsync(
+            chatId: chatId,
+            text: message,
+            parseMode: ParseMode.Markdown,
+            disableWebPagePreview: true,
             disableNotification: true,
             replyMarkup: inlineKeyboard
         );
@@ -321,8 +397,6 @@ public class TelegramBotService
         }
     }
 
-    private readonly HashSet<string> _processedCallbacks = new HashSet<string>();
-
     public async Task HandleCallbackQueryAsync(CallbackQuery callbackQuery)
     {
         Console.WriteLine($"🎯 HandleCallbackQueryAsync called with data: '{callbackQuery.Data}'");
@@ -371,6 +445,12 @@ public class TelegramBotService
                 await DeleteMessageAsync(chatId, messageId);
                 // Обрабатываем запрос деталей коммита
                 await HandleCommitDetailsCallbackAsync(chatId, data);
+            }
+            else if (data.StartsWith("toggle:"))
+            {
+                Console.WriteLine("⚙️ Processing notification toggle request");
+                // Обрабатываем переключение уведомлений
+                await HandleNotificationToggleAsync(chatId, data, messageId);
             }
             else
             {
@@ -535,6 +615,161 @@ public class TelegramBotService
             Console.WriteLine($"Error handling commit details: {ex.Message}");
             await _botClient.SendTextMessageAsync(chatId, "❌ Ошибка получения деталей коммита", disableNotification: true);
         }
+    }
+
+    private async Task HandleNotificationToggleAsync(long chatId, string callbackData, int messageId)
+    {
+        try
+        {
+            // Разбираем callback data: toggle:type:chatId
+            var parts = callbackData.Split(':');
+            if (parts.Length < 3)
+            {
+                await _botClient.AnswerCallbackQueryAsync(callbackData, "❌ Ошибка: некорректные данные");
+                return;
+            }
+
+            var type = parts[1];
+            var targetChatId = long.Parse(parts[2]);
+
+            if (chatId != targetChatId)
+            {
+                await _botClient.AnswerCallbackQueryAsync(callbackData, "❌ Ошибка: неправильный чат");
+                return;
+            }
+
+            var settings = GetOrCreateSettings(chatId);
+
+            // Переключаем соответствующую настройку
+            string notificationType = "";
+            switch (type)
+            {
+                case "push":
+                    settings.PushNotifications = !settings.PushNotifications;
+                    notificationType = "Коммиты";
+                    break;
+                case "pr":
+                    settings.PullRequestNotifications = !settings.PullRequestNotifications;
+                    notificationType = "PR/MR";
+                    break;
+                case "ci":
+                    settings.WorkflowNotifications = !settings.WorkflowNotifications;
+                    notificationType = "CI/CD";
+                    break;
+                case "release":
+                    settings.ReleaseNotifications = !settings.ReleaseNotifications;
+                    notificationType = "Релизы";
+                    break;
+                case "issue":
+                    settings.IssueNotifications = !settings.IssueNotifications;
+                    notificationType = "Задачи";
+                    break;
+                default:
+                    await _botClient.AnswerCallbackQueryAsync(callbackData, "❌ Неизвестный тип уведомления");
+                    return;
+            }
+
+            // Обновляем сообщение с новыми настройками
+            await UpdateSettingsMessageAsync(chatId, messageId);
+
+            // Отправляем подтверждение
+            var statusText = GetNotificationStatus(settings, type);
+            await _botClient.AnswerCallbackQueryAsync(callbackData, $"{statusText} {notificationType}");
+
+            Console.WriteLine($"⚙️ Toggled {type} notifications for chat {chatId}: {statusText}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error toggling notification: {ex.Message}");
+            await _botClient.AnswerCallbackQueryAsync(callbackData, "❌ Произошла ошибка");
+        }
+    }
+
+    private async Task UpdateSettingsMessageAsync(long chatId, int messageId)
+    {
+        try
+        {
+            var settings = GetOrCreateSettings(chatId);
+
+            var message = @"⚙️ *Настройки уведомлений*
+
+Выберите типы уведомлений, которые хотите получать:";
+
+            var inlineKeyboard = new InlineKeyboardMarkup(new[]
+            {
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData(
+                        $"{(settings.PushNotifications ? "✅" : "❌")} Коммиты",
+                        $"toggle:push:{chatId}"),
+                    InlineKeyboardButton.WithCallbackData(
+                        $"{(settings.PullRequestNotifications ? "✅" : "❌")} PR/MR",
+                        $"toggle:pr:{chatId}")
+                },
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData(
+                        $"{(settings.WorkflowNotifications ? "✅" : "❌")} CI/CD",
+                        $"toggle:ci:{chatId}"),
+                    InlineKeyboardButton.WithCallbackData(
+                        $"{(settings.ReleaseNotifications ? "✅" : "❌")} Релизы",
+                        $"toggle:release:{chatId}")
+                },
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData(
+                        $"{(settings.IssueNotifications ? "✅" : "❌")} Задачи",
+                        $"toggle:issue:{chatId}")
+                },
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/start")
+                }
+            });
+
+            await _botClient.EditMessageTextAsync(
+                chatId: chatId,
+                messageId: messageId,
+                text: message,
+                parseMode: ParseMode.Markdown,
+                disableWebPagePreview: true,
+                replyMarkup: inlineKeyboard
+            );
+
+            Console.WriteLine($"✅ Updated settings message for chat {chatId}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error updating settings message: {ex.Message}");
+        }
+    }
+
+    private string GetNotificationStatus(NotificationSettings settings, string type)
+    {
+        return type switch
+        {
+            "push" => settings.PushNotifications ? "Включены" : "Отключены",
+            "pr" => settings.PullRequestNotifications ? "Включены" : "Отключены",
+            "ci" => settings.WorkflowNotifications ? "Включены" : "Отключены",
+            "release" => settings.ReleaseNotifications ? "Включены" : "Отключены",
+            "issue" => settings.IssueNotifications ? "Включены" : "Отключены",
+            _ => "Неизвестно"
+        };
+    }
+
+    public bool ShouldSendNotification(long chatId, string notificationType)
+    {
+        var settings = GetOrCreateSettings(chatId);
+
+        return notificationType switch
+        {
+            "push" => settings.PushNotifications,
+            "pull_request" => settings.PullRequestNotifications,
+            "workflow" => settings.WorkflowNotifications,
+            "release" => settings.ReleaseNotifications,
+            "issues" => settings.IssueNotifications,
+            _ => true // По умолчанию отправляем все неизвестные типы
+        };
     }
 
     private async Task<string> GetFullShaFromShortAsync(string shortSha, string repoName)

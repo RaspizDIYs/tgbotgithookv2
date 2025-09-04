@@ -154,14 +154,15 @@ var githubToken = Environment.GetEnvironmentVariable("GITHUB_PAT");
 
 Console.WriteLine($"   GITHUB_PAT: '{githubToken?.Substring(0, Math.Min(25, githubToken?.Length ?? 0)) ?? "NULL"}...' (length: {githubToken?.Length ?? 0})");
 
-if (!string.IsNullOrWhiteSpace(githubToken))
-{
-    Console.WriteLine($"✅ GitHub Personal Access Token configured (length: {githubToken.Length})");
-    var githubClient = new GitHubClient(new ProductHeaderValue("TelegramGitHubBot"));
-    githubClient.Credentials = new Credentials(githubToken.Trim());
-    builder.Services.AddSingleton<GitHubClient>(githubClient);
-    builder.Services.AddSingleton<GitHubService>();
-}
+       if (!string.IsNullOrWhiteSpace(githubToken))
+       {
+           Console.WriteLine($"✅ GitHub Personal Access Token configured (length: {githubToken.Length})");
+           var githubClient = new GitHubClient(new ProductHeaderValue("TelegramGitHubBot"));
+           githubClient.Credentials = new Credentials(githubToken.Trim());
+           builder.Services.AddSingleton<GitHubClient>(githubClient);
+           builder.Services.AddSingleton<GitHubService>();
+           builder.Services.AddSingleton<TelegramBotService>();
+       }
 else
 {
     Console.WriteLine("❌ ERROR: GITHUB_PAT environment variable is not set or empty!");

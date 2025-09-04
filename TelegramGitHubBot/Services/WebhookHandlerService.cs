@@ -10,17 +10,20 @@ public class WebhookHandlerService
     private readonly IConfiguration _configuration;
     private readonly ITelegramBotClient _telegramBotClient;
     private readonly GitHubService _gitHubService;
+    private readonly TelegramBotService _telegramBotService;
     private readonly ILogger<WebhookHandlerService> _logger;
 
     public WebhookHandlerService(
         IConfiguration configuration,
         ITelegramBotClient telegramBotClient,
         GitHubService gitHubService,
+        TelegramBotService telegramBotService,
         ILogger<WebhookHandlerService> logger)
     {
         _configuration = configuration;
         _telegramBotClient = telegramBotClient;
         _gitHubService = gitHubService;
+        _telegramBotService = telegramBotService;
         _logger = logger;
     }
 
@@ -181,7 +184,7 @@ public class WebhookHandlerService
         }
 
         _logger.LogInformation($"📤 Sending push message to chat {chatId}: {message.Replace('\n', ' ')}");
-        var pushMessage = await SendTelegramMessageAsync(chatId, message, inlineKeyboard);
+        var pushMessage = await SendTelegramMessageAsync(chatId, message, "push", inlineKeyboard);
         _logger.LogInformation($"✅ Push message sent successfully to chat {chatId}, MessageId: {pushMessage?.MessageId}");
     }
 
@@ -218,7 +221,7 @@ public class WebhookHandlerService
 
         if (message != null)
         {
-            await SendTelegramMessageAsync(chatId, message);
+            await SendTelegramMessageAsync(chatId, message, "pull_request");
         }
     }
 
@@ -251,7 +254,7 @@ public class WebhookHandlerService
 
         if (message != null)
         {
-            await SendTelegramMessageAsync(chatId, message);
+            await SendTelegramMessageAsync(chatId, message, "issues");
         }
     }
 
@@ -271,7 +274,7 @@ public class WebhookHandlerService
                      $"👤 {author}\n" +
                      $"🔗 [Посмотреть релиз]({htmlUrl})";
 
-        await SendTelegramMessageAsync(chatId, message);
+        await SendTelegramMessageAsync(chatId, message, "release");
     }
 
     private async Task HandleWorkflowRunEventAsync(JsonElement payload, long chatId)
@@ -298,7 +301,19 @@ public class WebhookHandlerService
                      $"📊 Статус: {conclusion}\n" +
                      $"🔗 [Детали]({htmlUrl})";
 
-        await SendTelegramMessageAsync(chatId, message);
+        await SendTelegramMessageAsync(chatId, message, "workflow");
+    }
+
+    private async Task<Telegram.Bot.Types.Message?> SendTelegramMessageAsync(long chatId, string message, string notificationType, InlineKeyboardMarkup? keyboard = null)
+    {
+        // Проверяем настройки уведомлений для данного чата
+        if (!_telegramBotService.ShouldSendNotification(chatId, notificationType))
+        {
+            _logger.LogInformation($"🔕 Notification {notificationType} disabled for chat {chatId}, skipping");
+            return null;
+        }
+
+        return await SendTelegramMessageAsync(chatId, message, keyboard);
     }
 
     private async Task<Telegram.Bot.Types.Message?> SendTelegramMessageAsync(long chatId, string message, InlineKeyboardMarkup? keyboard = null)
