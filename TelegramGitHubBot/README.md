@@ -216,8 +216,30 @@ docker run -p 8080:80 -p 8443:443 telegram-github-bot
    | `GITHUB_WEBHOOK_SECRET` | Секрет для webhook (опционально) | ❌ |
    | `ASPNETCORE_ENVIRONMENT` | `Production` | ✅ |
    | `ASPNETCORE_URLS` | `http://+:10000` | ✅ |
+   | `RENDER_EXTERNAL_URL` | `https://your-app.onrender.com` | ❌ |
 
 3. **Перезапустите сервис** после добавления переменных
+
+#### ⚡ Решение проблемы спящих инстансов
+
+Бесплатные инстансы Render засыпают при неактивности. Вот решения:
+
+**Вариант 1: Внешний мониторинг (Рекомендуется)**
+1. Зарегистрируйтесь на [UptimeRobot](https://uptimerobot.com/)
+2. Добавьте мониторинг: `https://tgbotgithookv2.onrender.com/health`
+3. Настройте проверки каждые 5 минут
+4. Добавьте `https://tgbotgithookv2.onrender.com/ping` для дополнительного пинга
+
+**Вариант 2: Cron-job в другом сервисе**
+Используйте [cron-job.org](https://cron-job.org/) или подобный сервис для регулярных запросов.
+
+**Вариант 3: Переход на платный тариф**
+- **Starter** ($7/мес) - без сна, 750 часов
+- **Standard** ($25/мес) - без сна, 1500 часов
+
+**Текущая настройка:**
+- Приложение само пингует себя каждые 5 минут
+- Доступны endpoints: `/health` и `/ping`
 
 #### Azure App Service
 ```bash

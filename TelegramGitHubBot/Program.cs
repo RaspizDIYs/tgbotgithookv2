@@ -1,3 +1,4 @@
+using System.Net.Http;
 using Telegram.Bot;
 using Octokit;
 using TelegramGitHubBot.Services;
@@ -52,6 +53,40 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
                 var telegramService = new TelegramBotService(botClient, githubService);
 
                 int? lastUpdateId = null;
+
+                // Self-ping task to keep instance alive
+                var selfPingTask = Task.Run(async () =>
+                {
+                    using var httpClient = new HttpClient();
+                    var baseUrl = Environment.GetEnvironmentVariable("RENDER_EXTERNAL_URL") ??
+                                 Environment.GetEnvironmentVariable("ASPNETCORE_URLS")?.Split(';').FirstOrDefault() ??
+                                 "http://localhost:5000";
+
+                    while (true)
+                    {
+                        try
+                        {
+                            var pingUrl = $"{baseUrl.TrimEnd('/')}/ping";
+                            Console.WriteLine($"🏓 Self-ping: {pingUrl}");
+
+                            var response = await httpClient.GetAsync(pingUrl);
+                            if (response.IsSuccessStatusCode)
+                            {
+                                Console.WriteLine("✅ Self-ping successful");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"⚠️ Self-ping failed: {response.StatusCode}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"❌ Self-ping error: {ex.Message}");
+                        }
+
+                        await Task.Delay(30 * 1000); // Ping every 30 seconds
+                    }
+                });
 
                 while (true)
                 {
@@ -176,6 +211,14 @@ app.MapPost("/webhook/telegram/{token}", async (string token, HttpContext contex
 });
 
 // Health check endpoint
+// Self-ping endpoint to keep instance alive
+app.MapGet("/ping", () => Results.Ok(new
+{
+    status = "pong",
+    timestamp = DateTime.Now,
+    uptime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+}));
+
 app.MapGet("/health", () => Results.Ok(new
 {
     status = "healthy",
