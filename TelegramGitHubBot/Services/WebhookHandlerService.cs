@@ -88,6 +88,8 @@ public class WebhookHandlerService
                 return;
             }
 
+            Console.WriteLine($"🎯 Webhook processing for event {eventType}, using chatId: {chatId}");
+
             _logger.LogInformation($"✅ Using Chat ID: {chatId}");
 
             switch (eventType)
@@ -307,12 +309,15 @@ public class WebhookHandlerService
     private async Task<Telegram.Bot.Types.Message?> SendTelegramMessageAsync(long chatId, string message, string notificationType, InlineKeyboardMarkup? keyboard = null)
     {
         // Проверяем настройки уведомлений для данного чата
+        Console.WriteLine($"🔍 Webhook: Checking notification {notificationType} for chat {chatId}");
         if (!_telegramBotService.ShouldSendNotification(chatId, notificationType))
         {
             _logger.LogInformation($"🔕 Notification {notificationType} disabled for chat {chatId}, skipping");
+            Console.WriteLine($"🔕 Notification {notificationType} disabled for chat {chatId}, skipping");
             return null;
         }
 
+        Console.WriteLine($"✅ Notification {notificationType} enabled for chat {chatId}, sending");
         return await SendTelegramMessageAsync(chatId, message, keyboard);
     }
 

@@ -160,7 +160,9 @@ public class TelegramBotService
 • Коммитах
 • PR/MR
 • CI/CD
-• Релизах";
+• Релизах
+
+💡 *Настройте уведомления* через ⚙️ Настройки";
 
         var inlineKeyboard = new InlineKeyboardMarkup(new[]
         {
@@ -181,6 +183,7 @@ public class TelegramBotService
             },
             new[]
             {
+                InlineKeyboardButton.WithCallbackData("⚙️ Настройки", "/settings"),
                 InlineKeyboardButton.WithCallbackData("❓ Справка", "/help"),
             }
         });
@@ -247,13 +250,22 @@ public class TelegramBotService
     {
         var message = @"📋 Команды бота:
 
-/status - Статус репозитория
-/commits [ветка] - Коммиты
-/branches - Список веток
-/prs - Открытые PR
-/ci [ветка] - CI/CD статус
-/deploy [среда] - Деплой
-/help - Эта справка";
+📊 /status - Статус репозитория
+📝 /commits [ветка] - Коммиты
+🌿 /branches - Список веток
+🔄 /prs - Открытые PR
+⚙️ /ci [ветка] - CI/CD статус
+🚀 /deploy [среда] - Деплой
+⚙️ /settings - Настройки уведомлений
+📋 /help - Эта справка
+
+💡 *Управление уведомлениями:*
+Используйте /settings для настройки типов уведомлений:
+• Коммиты (новые пуши)
+• PR/MR (pull requests)
+• CI/CD (статус сборок)
+• Релизы (новые версии)
+• Задачи (issues)";
 
         var inlineKeyboard = new InlineKeyboardMarkup(new[]
         {
@@ -274,6 +286,7 @@ public class TelegramBotService
             },
             new[]
             {
+                InlineKeyboardButton.WithCallbackData("⚙️ Настройки", "/settings"),
                 InlineKeyboardButton.WithCallbackData("🏠 Главное меню", "/start"),
             }
         });
@@ -761,7 +774,10 @@ public class TelegramBotService
     {
         var settings = GetOrCreateSettings(chatId);
 
-        return notificationType switch
+        Console.WriteLine($"🔍 Checking notification settings for chat {chatId}, type: {notificationType}");
+        Console.WriteLine($"   Push: {settings.PushNotifications}, PR: {settings.PullRequestNotifications}, CI: {settings.WorkflowNotifications}, Release: {settings.ReleaseNotifications}, Issues: {settings.IssueNotifications}");
+
+        var result = notificationType switch
         {
             "push" => settings.PushNotifications,
             "pull_request" => settings.PullRequestNotifications,
@@ -770,6 +786,9 @@ public class TelegramBotService
             "issues" => settings.IssueNotifications,
             _ => true // По умолчанию отправляем все неизвестные типы
         };
+
+        Console.WriteLine($"   Result for {notificationType}: {result}");
+        return result;
     }
 
     private async Task<string> GetFullShaFromShortAsync(string shortSha, string repoName)
