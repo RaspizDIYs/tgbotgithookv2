@@ -28,7 +28,7 @@ public class WebhookHandlerService
             var signature = context.Request.Headers["X-Hub-Signature-256"].ToString();
             var deliveryId = context.Request.Headers["X-GitHub-Delivery"].ToString();
 
-            _logger.LogInformation($"Received GitHub webhook: {eventType}, Delivery: {deliveryId}");
+            _logger.LogInformation($"🔥 Received GitHub webhook: {eventType}, Delivery: {deliveryId}");
 
             // Читаем тело запроса
             using var reader = new StreamReader(context.Request.Body);
@@ -51,6 +51,7 @@ public class WebhookHandlerService
             await ProcessGitHubEventAsync(eventType, payload);
 
             context.Response.StatusCode = 200;
+            _logger.LogInformation($"✅ Webhook processed successfully: {eventType}");
         }
         catch (Exception ex)
         {
@@ -67,11 +68,17 @@ public class WebhookHandlerService
             var chatIdStr = _configuration["Telegram:ChatId"] ??
                            Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID");
 
+            _logger.LogInformation($"🔍 Chat ID from config: '{_configuration["Telegram:ChatId"]}'");
+            _logger.LogInformation($"🔍 Chat ID from env: '{Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID")}'");
+            _logger.LogInformation($"🔍 Final Chat ID string: '{chatIdStr}'");
+
             if (string.IsNullOrEmpty(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
             {
-                _logger.LogWarning("Telegram Chat ID not configured. Skipping notification.");
+                _logger.LogWarning($"❌ Telegram Chat ID not configured or invalid. ChatIdStr: '{chatIdStr}', IsNullOrEmpty: {string.IsNullOrEmpty(chatIdStr)}, ParseResult: {long.TryParse(chatIdStr, out var _)}");
                 return;
             }
+
+            _logger.LogInformation($"✅ Using Chat ID: {chatId}");
 
             switch (eventType)
             {
@@ -108,13 +115,20 @@ public class WebhookHandlerService
 
     private async Task HandlePushEventAsync(JsonElement payload, long chatId)
     {
+        _logger.LogInformation($"🚀 Processing push event for chat {chatId}");
+
         var repository = payload.GetProperty("repository");
         var repoName = repository.GetProperty("full_name").GetString();
         var ref_name = payload.GetProperty("ref").GetString()?.Replace("refs/heads/", "");
         var commits = payload.GetProperty("commits");
 
+        _logger.LogInformation($"📦 Push to {repoName}/{ref_name}, commits: {commits.GetArrayLength()}");
+
         if (commits.GetArrayLength() == 0)
+        {
+            _logger.LogInformation("🚫 Empty push, skipping notification");
             return; // Пропускаем пустые пуши (например, merge commits)
+        }
 
         var message = $"🚀 *Новый пуш в {repoName}*\n\n" +
                      $"🌿 Ветка: `{ref_name}`\n" +
@@ -138,7 +152,9 @@ public class WebhookHandlerService
         var pusher = payload.GetProperty("pusher").GetProperty("name").GetString();
         message += $"👤 Автор: {pusher}";
 
+        _logger.LogInformation($"📤 Sending message to chat {chatId}: {message.Replace('\n', ' ')}");
         await SendTelegramMessageAsync(chatId, message);
+        _logger.LogInformation($"✅ Message sent successfully to chat {chatId}");
     }
 
     private async Task HandlePullRequestEventAsync(JsonElement payload, long chatId)
@@ -261,16 +277,22 @@ public class WebhookHandlerService
     {
         try
         {
-            await _telegramBotClient.SendTextMessageAsync(
+            _logger.LogInformation($"📨 Attempting to send message to chat {chatId}");
+            var result = await _telegramBotClient.SendTextMessageAsync(
                 chatId: chatId,
                 text: message,
                 parseMode: ParseMode.Markdown,
                 disableWebPagePreview: true
             );
+            _logger.LogInformation($"✅ Telegram message sent, MessageId: {result.MessageId}");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error sending Telegram message");
+            _logger.LogError(ex, $"❌ Error sending Telegram message to chat {chatId}: {ex.Message}");
+            if (ex.InnerException != null)
+            {
+                _logger.LogError(ex.InnerException, "Inner exception details");
+            }
         }
     }
 
