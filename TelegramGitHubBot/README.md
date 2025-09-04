@@ -207,14 +207,17 @@ docker run -p 8080:80 -p 8443:443 telegram-github-bot
 **Настройка переменных окружения в Render:**
 1. Перейдите в Render Dashboard → Your Service → Environment
 2. Добавьте переменные:
-   ```
-   TELEGRAM_BOT_TOKEN = 8416057314:AAFvQhdwgJd1eiEZn6MUckb00d5RxfqOTJA
-   TELEGRAM_CHAT_ID = YOUR_TELEGRAM_CHAT_ID
-   GITHUB_PAT = YOUR_GITHUB_PAT_HERE
-   GITHUB_WEBHOOK_SECRET = YOUR_SECRET_HERE (опционально)
-   ASPNETCORE_ENVIRONMENT = Production
-   ASPNETCORE_URLS = http://+:10000
-   ```
+
+   | Переменная | Значение | Обязательно |
+   |------------|----------|-------------|
+   | `TELEGRAM_BOT_TOKEN` | | ✅ |
+   | `TELEGRAM_CHAT_ID` | Ваш Chat ID из Telegram | ✅ |
+   | `GITHUB_PAT` | Ваш GitHub Personal Access Token | ✅ |
+   | `GITHUB_WEBHOOK_SECRET` | Секрет для webhook (опционально) | ❌ |
+   | `ASPNETCORE_ENVIRONMENT` | `Production` | ✅ |
+   | `ASPNETCORE_URLS` | `http://+:10000` | ✅ |
+
+3. **Перезапустите сервис** после добавления переменных
 
 #### Azure App Service
 ```bash
