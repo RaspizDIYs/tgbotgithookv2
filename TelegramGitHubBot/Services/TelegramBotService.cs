@@ -44,14 +44,12 @@ public class TelegramBotService
         var chatId = message.Chat.Id;
         var text = message.Text.Trim();
 
+        // Отвечаем только на команды, начинающиеся с "/"
         if (text.StartsWith("/"))
         {
             await HandleCommandAsync(chatId, text, message.From?.Username);
         }
-        else
-        {
-            await _botClient.SendTextMessageAsync(chatId, "Используйте команды для взаимодействия с ботом");
-        }
+        // Игнорируем все остальные сообщения (не отвечаем)
     }
 
     private async Task HandleCommandAsync(long chatId, string command, string? username)
