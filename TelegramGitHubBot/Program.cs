@@ -21,35 +21,57 @@ foreach (string key in envVars.Keys)
 Console.WriteLine("===================================");
 
 // Configure Telegram Bot
-var telegramToken = builder.Configuration["Telegram:BotToken"] ??
-                   Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
-if (!string.IsNullOrEmpty(telegramToken))
+Console.WriteLine("🔍 Reading Telegram Bot Token...");
+var telegramToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
+
+Console.WriteLine($"   TELEGRAM_BOT_TOKEN: '{telegramToken?.Substring(0, Math.Min(20, telegramToken?.Length ?? 0)) ?? "NULL"}...' (length: {telegramToken?.Length ?? 0})");
+
+if (!string.IsNullOrWhiteSpace(telegramToken))
 {
     Console.WriteLine($"✅ Telegram Bot Token configured (length: {telegramToken.Length})");
-    builder.Services.AddSingleton<ITelegramBotClient>(new TelegramBotClient(telegramToken));
+    builder.Services.AddSingleton<ITelegramBotClient>(new TelegramBotClient(telegramToken.Trim()));
     builder.Services.AddSingleton<TelegramBotService>();
 }
 else
 {
-    Console.WriteLine("❌ Warning: Telegram Bot Token not configured. Telegram features will be disabled.");
-    Console.WriteLine("   Make sure TELEGRAM_BOT_TOKEN environment variable is set.");
+    Console.WriteLine("❌ ERROR: TELEGRAM_BOT_TOKEN environment variable is not set or empty!");
+    Console.WriteLine("   Please check your Render environment variables.");
 }
 
 // Configure GitHub Client
-var githubToken = builder.Configuration["GitHub:PersonalAccessToken"] ??
-                 Environment.GetEnvironmentVariable("GITHUB_PAT");
-if (!string.IsNullOrEmpty(githubToken))
+Console.WriteLine("🔍 Reading GitHub Personal Access Token...");
+var githubToken = Environment.GetEnvironmentVariable("GITHUB_PAT");
+
+Console.WriteLine($"   GITHUB_PAT: '{githubToken?.Substring(0, Math.Min(25, githubToken?.Length ?? 0)) ?? "NULL"}...' (length: {githubToken?.Length ?? 0})");
+
+if (!string.IsNullOrWhiteSpace(githubToken))
 {
     Console.WriteLine($"✅ GitHub Personal Access Token configured (length: {githubToken.Length})");
     var githubClient = new GitHubClient(new ProductHeaderValue("TelegramGitHubBot"));
-    githubClient.Credentials = new Credentials(githubToken);
+    githubClient.Credentials = new Credentials(githubToken.Trim());
     builder.Services.AddSingleton<GitHubClient>(githubClient);
     builder.Services.AddSingleton<GitHubService>();
 }
 else
 {
-    Console.WriteLine("❌ Warning: GitHub Personal Access Token not configured. GitHub features will be disabled.");
-    Console.WriteLine("   Make sure GITHUB_PAT environment variable is set.");
+    Console.WriteLine("❌ ERROR: GITHUB_PAT environment variable is not set or empty!");
+    Console.WriteLine("   Please check your Render environment variables.");
+}
+
+// Configure Chat ID for webhooks
+Console.WriteLine("🔍 Reading Telegram Chat ID...");
+var telegramChatId = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID");
+
+Console.WriteLine($"   TELEGRAM_CHAT_ID: '{telegramChatId ?? "NULL"}'");
+
+if (!string.IsNullOrWhiteSpace(telegramChatId))
+{
+    Console.WriteLine($"✅ Telegram Chat ID configured: {telegramChatId}");
+}
+else
+{
+    Console.WriteLine("⚠️  WARNING: TELEGRAM_CHAT_ID not set - webhooks will not work!");
+    Console.WriteLine("   Please add TELEGRAM_CHAT_ID to your Render environment variables.");
 }
 
 builder.Services.AddSingleton<WebhookHandlerService>();
