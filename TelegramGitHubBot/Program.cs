@@ -62,6 +62,10 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
                             {
                                 await telegramService.HandleMessageAsync(update.Message);
                             }
+                            else if (update.CallbackQuery != null)
+                            {
+                                await telegramService.HandleCallbackQueryAsync(update.CallbackQuery);
+                            }
                         }
 
                         if (updates.Length > 0)
