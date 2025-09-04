@@ -320,11 +320,16 @@ public class TelegramBotService
 
     public async Task HandleCallbackQueryAsync(CallbackQuery callbackQuery)
     {
+        Console.WriteLine($"🎯 HandleCallbackQueryAsync called with data: '{callbackQuery.Data}'");
+
         var chatId = callbackQuery.Message?.Chat.Id ?? 0;
         var data = callbackQuery.Data;
 
+        Console.WriteLine($"📍 ChatId: {chatId}, Data: '{data}'");
+
         if (chatId == 0 || string.IsNullOrEmpty(data))
         {
+            Console.WriteLine("❌ Invalid callback query data");
             await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Ошибка обработки запроса");
             return;
         }
@@ -333,22 +338,25 @@ public class TelegramBotService
         {
             // Отвечаем на callback query
             await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id);
+            Console.WriteLine("✅ Callback query answered");
 
             // Проверяем, является ли это запросом деталей коммита
-            if (data.StartsWith("commit_details:"))
+            if (data.StartsWith("cd:") || data.StartsWith("commit_details:"))
             {
+                Console.WriteLine("📋 Processing commit details request");
                 // Обрабатываем запрос деталей коммита
                 await HandleCommitDetailsCallbackAsync(chatId, data);
             }
             else
             {
+                Console.WriteLine("📝 Processing regular command");
                 // Обрабатываем обычную команду из callback data
                 await HandleCommandAsync(chatId, data, callbackQuery.From?.Username);
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Callback query error: {ex.Message}");
+            Console.WriteLine($"❌ Callback query error: {ex.Message}");
             await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Произошла ошибка");
         }
     }

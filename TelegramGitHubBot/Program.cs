@@ -51,32 +51,45 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
                 var githubService = new GitHubService(githubClient);
                 var telegramService = new TelegramBotService(botClient, githubService);
 
+                int? lastUpdateId = null;
+
                 while (true)
                 {
                     try
                     {
-                        var updates = await botClient.GetUpdatesAsync(offset: -1, timeout: 30);
+                        Console.WriteLine($"🔍 Polling for updates... (lastUpdateId: {lastUpdateId})");
+                        var updates = await botClient.GetUpdatesAsync(
+                            offset: lastUpdateId,
+                            timeout: 30);
+
+                        Console.WriteLine($"📦 Received {updates.Length} updates");
+
                         foreach (var update in updates)
                         {
+                            Console.WriteLine($"📨 Processing update {update.Id}: Type={update.Type}");
+
                             if (update.Message != null)
                             {
+                                Console.WriteLine($"💬 Message from {update.Message.Chat.Id}: {update.Message.Text}");
                                 await telegramService.HandleMessageAsync(update.Message);
                             }
                             else if (update.CallbackQuery != null)
                             {
+                                Console.WriteLine($"🔘 Callback query from {update.CallbackQuery.From.Id}: {update.CallbackQuery.Data}");
                                 await telegramService.HandleCallbackQueryAsync(update.CallbackQuery);
                             }
+
+                            lastUpdateId = update.Id + 1;
                         }
 
-                        if (updates.Length > 0)
+                        if (updates.Length == 0)
                         {
-                            var lastUpdateId = updates[^1].Id;
-                            await botClient.GetUpdatesAsync(offset: lastUpdateId + 1);
+                            Console.WriteLine("⏳ No new updates, waiting...");
                         }
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Polling error: {ex.Message}");
+                        Console.WriteLine($"❌ Polling error: {ex.Message}");
                         await Task.Delay(5000); // Wait 5 seconds before retry
                     }
 
