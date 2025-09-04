@@ -8,17 +8,31 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Debug: Print available environment variables
+Console.WriteLine("=== Environment Variables Debug ===");
+var envVars = Environment.GetEnvironmentVariables();
+foreach (string key in envVars.Keys)
+{
+    if (key.Contains("TELEGRAM") || key.Contains("GITHUB") || key.Contains("ASPNETCORE"))
+    {
+        Console.WriteLine($"{key} = {envVars[key]}");
+    }
+}
+Console.WriteLine("===================================");
+
 // Configure Telegram Bot
 var telegramToken = builder.Configuration["Telegram:BotToken"] ??
                    Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
 if (!string.IsNullOrEmpty(telegramToken))
 {
+    Console.WriteLine($"✅ Telegram Bot Token configured (length: {telegramToken.Length})");
     builder.Services.AddSingleton<ITelegramBotClient>(new TelegramBotClient(telegramToken));
     builder.Services.AddSingleton<TelegramBotService>();
 }
 else
 {
-    Console.WriteLine("Warning: Telegram Bot Token not configured. Telegram features will be disabled.");
+    Console.WriteLine("❌ Warning: Telegram Bot Token not configured. Telegram features will be disabled.");
+    Console.WriteLine("   Make sure TELEGRAM_BOT_TOKEN environment variable is set.");
 }
 
 // Configure GitHub Client
@@ -26,6 +40,7 @@ var githubToken = builder.Configuration["GitHub:PersonalAccessToken"] ??
                  Environment.GetEnvironmentVariable("GITHUB_PAT");
 if (!string.IsNullOrEmpty(githubToken))
 {
+    Console.WriteLine($"✅ GitHub Personal Access Token configured (length: {githubToken.Length})");
     var githubClient = new GitHubClient(new ProductHeaderValue("TelegramGitHubBot"));
     githubClient.Credentials = new Credentials(githubToken);
     builder.Services.AddSingleton<GitHubClient>(githubClient);
@@ -33,7 +48,8 @@ if (!string.IsNullOrEmpty(githubToken))
 }
 else
 {
-    Console.WriteLine("Warning: GitHub Personal Access Token not configured. GitHub features will be disabled.");
+    Console.WriteLine("❌ Warning: GitHub Personal Access Token not configured. GitHub features will be disabled.");
+    Console.WriteLine("   Make sure GITHUB_PAT environment variable is set.");
 }
 
 builder.Services.AddSingleton<WebhookHandlerService>();
