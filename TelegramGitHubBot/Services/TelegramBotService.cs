@@ -106,8 +106,12 @@ public class TelegramBotService
                     }
                     break;
 
+                case "/педик":
+                    await _botClient.SendTextMessageAsync(chatId, "Сам ты педик");
+                    break;
+
                 default:
-                    await _botClient.SendTextMessageAsync(chatId, "Неизвестная команда. Используйте /help для списка команд.");
+                    
                     break;
             }
         }
@@ -124,22 +128,42 @@ public class TelegramBotService
 
 Я слежу за вашим репозиторием goodluckv2 и уведомляю о всех изменениях.
 
-*Доступные команды:*
-/help - Показать справку
-/status - Статус репозитория
-/commits [ветка] [количество] - Последние коммиты
-/branches - Список веток
-/prs - Открытые pull requests
-/ci [ветка] [количество] - CI/CD статус
-/deploy [среда] - Запустить деплой
-
 *Уведомления:*
 • Новые коммиты
 • Pull requests
 • CI/CD статус
 • Релизы
 ";
-        await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown);
+
+        var inlineKeyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("📊 Статус", "/status"),
+                InlineKeyboardButton.WithCallbackData("📝 Коммиты", "/commits"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🌿 Ветки", "/branches"),
+                InlineKeyboardButton.WithCallbackData("🔄 PR", "/prs"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⚙️ CI/CD", "/ci"),
+                InlineKeyboardButton.WithCallbackData("🚀 Деплой", "/deploy"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("❓ Справка", "/help"),
+            }
+        });
+
+        await _botClient.SendTextMessageAsync(
+            chatId: chatId,
+            text: message,
+            parseMode: ParseMode.Markdown,
+            replyMarkup: inlineKeyboard
+        );
     }
 
     private async Task SendHelpMessageAsync(long chatId)
@@ -147,25 +171,52 @@ public class TelegramBotService
         var message = @"
 📋 *Справка по командам:*
 
-*/status* - Текущий статус репозитория
-*/commits [ветка] [число]* - Последние коммиты (по умолчанию main, 5 шт)
-*/branches* - Все ветки репозитория
-*/prs* - Открытые pull requests
+*Основные команды:*
+• `/status` - Статус репозитория
+• `/commits [ветка]` - Последние коммиты
+• `/branches` - Список веток
+• `/prs` - Открытые PR
+
+*Дополнительно:*
+• `/ci [ветка]` - CI/CD статус
+• `/deploy [среда]` - Запуск деплоя
+• `/help` - Эта справка
 
 *Примеры:*
-`/commits` - 5 последних коммитов в main
-`/commits develop 10` - 10 последних в develop
-`/commits feature/new-ui` - коммиты в feature ветке
-
-*/ci [ветка] [число]* - Статус CI/CD
-`/ci` - последние 5 запусков
-`/ci main 10` - 10 запусков в main
-
-*/deploy [среда]* - Запустить деплой
-`/deploy staging` - деплой в staging
-`/deploy production` - деплой в production
+• `/commits` - 5 коммитов из main
+• `/commits develop 10` - 10 из develop
+• `/ci main` - CI/CD для main
 ";
-        await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown);
+
+        var inlineKeyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("📊 Статус", "/status"),
+                InlineKeyboardButton.WithCallbackData("📝 Коммиты", "/commits"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🌿 Ветки", "/branches"),
+                InlineKeyboardButton.WithCallbackData("🔄 PR", "/prs"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⚙️ CI/CD", "/ci"),
+                InlineKeyboardButton.WithCallbackData("🚀 Деплой", "/deploy"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🏠 Главное меню", "/start"),
+            }
+        });
+
+        await _botClient.SendTextMessageAsync(
+            chatId: chatId,
+            text: message,
+            parseMode: ParseMode.Markdown,
+            replyMarkup: inlineKeyboard
+        );
     }
 
     private async Task HandleWorkflowsCommandAsync(long chatId, string? branch, int count)
@@ -281,7 +332,27 @@ public class TelegramBotService
 
     private async Task HandleCallbackQueryAsync(CallbackQuery callbackQuery)
     {
-        // Обработка callback запросов от inline клавиатур
-        await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id);
+        var chatId = callbackQuery.Message?.Chat.Id ?? 0;
+        var data = callbackQuery.Data;
+
+        if (chatId == 0 || string.IsNullOrEmpty(data))
+        {
+            await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Ошибка обработки запроса");
+            return;
+        }
+
+        try
+        {
+            // Отвечаем на callback query
+            await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id);
+
+            // Обрабатываем команду из callback data
+            await HandleCommandAsync(chatId, data, callbackQuery.From?.Username);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Callback query error: {ex.Message}");
+            await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Произошла ошибка");
+        }
     }
 }
