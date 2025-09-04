@@ -311,6 +311,7 @@ public class WebhookHandlerService
                 text: message,
                 parseMode: ParseMode.Markdown,
                 disableWebPagePreview: true,
+                disableNotification: true, // Отправляем без звука
                 replyMarkup: keyboard
             );
             _logger.LogInformation($"✅ Telegram message sent, MessageId: {result.MessageId}");

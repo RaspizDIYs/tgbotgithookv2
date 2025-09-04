@@ -70,7 +70,7 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
 
                             if (update.Message != null)
                             {
-                                Console.WriteLine($"💬 Message from {update.Message.Chat.Id}: {update.Message.Text}");
+                                // Не логируем содержимое сообщений пользователей по соображениям приватности
                                 await telegramService.HandleMessageAsync(update.Message);
                             }
                             else if (update.CallbackQuery != null)

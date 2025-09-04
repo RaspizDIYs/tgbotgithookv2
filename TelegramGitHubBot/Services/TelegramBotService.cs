@@ -106,22 +106,22 @@ public class TelegramBotService
                     }
                     else
                     {
-                        await _botClient.SendTextMessageAsync(chatId, "Укажите среду для деплоя: /deploy staging или /deploy production");
+                        await _botClient.SendTextMessageAsync(chatId, "Укажите среду для деплоя: /deploy staging или /deploy production", disableNotification: true);
                     }
                     break;
 
                 case "/педик":
-                    await _botClient.SendTextMessageAsync(chatId, "Сам ты педик");
+                    await _botClient.SendTextMessageAsync(chatId, "Сам ты педик", disableNotification: true);
                     break;
 
                 default:
-                    
+
                     break;
             }
         }
         catch (Exception ex)
         {
-            await _botClient.SendTextMessageAsync(chatId, $"Ошибка выполнения команды: {ex.Message}");
+            await _botClient.SendTextMessageAsync(chatId, $"Ошибка выполнения команды: {ex.Message}", disableNotification: true);
         }
     }
 
@@ -162,6 +162,7 @@ public class TelegramBotService
         await _botClient.SendTextMessageAsync(
             chatId: chatId,
             text: message,
+            disableNotification: true,
             replyMarkup: inlineKeyboard
         );
     }
@@ -204,6 +205,7 @@ public class TelegramBotService
         await _botClient.SendTextMessageAsync(
             chatId: chatId,
             text: message,
+            disableNotification: true,
             replyMarkup: inlineKeyboard
         );
     }
@@ -213,11 +215,11 @@ public class TelegramBotService
         try
         {
             var workflows = await _gitHubService.GetWorkflowRunsAsync(branch ?? string.Empty, count);
-            await _botClient.SendTextMessageAsync(chatId, workflows, parseMode: ParseMode.Markdown);
+            await _botClient.SendTextMessageAsync(chatId, workflows, parseMode: ParseMode.Markdown, disableNotification: true);
         }
         catch (Exception ex)
         {
-            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения CI/CD статусов: {ex.Message}");
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения CI/CD статусов: {ex.Message}", disableNotification: true);
         }
     }
 
@@ -228,20 +230,20 @@ public class TelegramBotService
             // Проверяем права пользователя
             if (string.IsNullOrEmpty(username))
             {
-                await _botClient.SendTextMessageAsync(chatId, "❌ Не удалось определить пользователя");
+                await _botClient.SendTextMessageAsync(chatId, "❌ Не удалось определить пользователя", disableNotification: true);
                 return;
             }
 
             var allowedUsers = new[] { "your_username" }; // Добавьте разрешенных пользователей
             if (!allowedUsers.Contains(username.ToLower()))
             {
-                await _botClient.SendTextMessageAsync(chatId, "❌ У вас нет прав для запуска деплоя");
+                await _botClient.SendTextMessageAsync(chatId, "❌ У вас нет прав для запуска деплоя", disableNotification: true);
                 return;
             }
 
             if (environment.ToLower() != "staging" && environment.ToLower() != "production")
             {
-                await _botClient.SendTextMessageAsync(chatId, "❌ Доступные среды: staging, production");
+                await _botClient.SendTextMessageAsync(chatId, "❌ Доступные среды: staging, production", disableNotification: true);
                 return;
             }
 
@@ -250,7 +252,7 @@ public class TelegramBotService
                          $"⏰ Время: {DateTime.Now:dd.MM.yyyy HH:mm}\n" +
                          $"🔄 Статус: Запускается...";
 
-            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown);
+            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
 
             // Здесь можно добавить логику для запуска GitHub Actions workflow
             // await _gitHubService.TriggerDeploymentAsync(environment, username);
@@ -259,11 +261,11 @@ public class TelegramBotService
                                $"👤 {username}\n" +
                                $"📊 Следите за статусом через /ci";
 
-            await _botClient.SendTextMessageAsync(chatId, successMessage, parseMode: ParseMode.Markdown);
+            await _botClient.SendTextMessageAsync(chatId, successMessage, parseMode: ParseMode.Markdown, disableNotification: true);
         }
         catch (Exception ex)
         {
-            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка запуска деплоя: {ex.Message}");
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка запуска деплоя: {ex.Message}", disableNotification: true);
         }
     }
 
@@ -272,11 +274,11 @@ public class TelegramBotService
         try
         {
             var status = await _gitHubService.GetRepositoryStatusAsync();
-            await _botClient.SendTextMessageAsync(chatId, status, parseMode: ParseMode.Markdown);
+            await _botClient.SendTextMessageAsync(chatId, status, parseMode: ParseMode.Markdown, disableNotification: true);
         }
         catch (Exception ex)
         {
-            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения статуса: {ex.Message}");
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения статуса: {ex.Message}", disableNotification: true);
         }
     }
 
@@ -285,11 +287,11 @@ public class TelegramBotService
         try
         {
             var commits = await _gitHubService.GetRecentCommitsAsync(branch, count);
-            await _botClient.SendTextMessageAsync(chatId, commits, parseMode: ParseMode.Markdown);
+            await _botClient.SendTextMessageAsync(chatId, commits, parseMode: ParseMode.Markdown, disableNotification: true);
         }
         catch (Exception ex)
         {
-            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения коммитов: {ex.Message}");
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения коммитов: {ex.Message}", disableNotification: true);
         }
     }
 
@@ -298,11 +300,11 @@ public class TelegramBotService
         try
         {
             var branches = await _gitHubService.GetBranchesAsync();
-            await _botClient.SendTextMessageAsync(chatId, branches, parseMode: ParseMode.Markdown);
+            await _botClient.SendTextMessageAsync(chatId, branches, parseMode: ParseMode.Markdown, disableNotification: true);
         }
         catch (Exception ex)
         {
-            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения веток: {ex.Message}");
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения веток: {ex.Message}", disableNotification: true);
         }
     }
 
@@ -311,11 +313,11 @@ public class TelegramBotService
         try
         {
             var prs = await _gitHubService.GetPullRequestsAsync();
-            await _botClient.SendTextMessageAsync(chatId, prs, parseMode: ParseMode.Markdown);
+            await _botClient.SendTextMessageAsync(chatId, prs, parseMode: ParseMode.Markdown, disableNotification: true);
         }
         catch (Exception ex)
         {
-            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения PR: {ex.Message}");
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения PR: {ex.Message}", disableNotification: true);
         }
     }
 
@@ -455,6 +457,7 @@ public class TelegramBotService
                 text: pushMessage,
                 parseMode: ParseMode.Markdown,
                 disableWebPagePreview: true,
+                disableNotification: true,
                 replyMarkup: inlineKeyboard
             );
 
@@ -473,7 +476,8 @@ public class TelegramBotService
                 chatId: chatId,
                 text: fallbackMessage,
                 parseMode: ParseMode.Markdown,
-                disableWebPagePreview: true
+                disableWebPagePreview: true,
+                disableNotification: true
             );
         }
     }
@@ -486,7 +490,7 @@ public class TelegramBotService
             var parts = callbackData.Split(':');
             if (parts.Length < 4)
             {
-                await _botClient.SendTextMessageAsync(chatId, "❌ Ошибка: некорректные данные");
+                await _botClient.SendTextMessageAsync(chatId, "❌ Ошибка: некорректные данные", disableNotification: true);
                 return;
             }
 
@@ -516,6 +520,7 @@ public class TelegramBotService
                     text: commitDetails,
                     parseMode: ParseMode.Markdown,
                     disableWebPagePreview: true,
+                    disableNotification: true,
                     replyMarkup: backKeyboard
                 );
             }
@@ -528,7 +533,7 @@ public class TelegramBotService
         catch (Exception ex)
         {
             Console.WriteLine($"Error handling commit details: {ex.Message}");
-            await _botClient.SendTextMessageAsync(chatId, "❌ Ошибка получения деталей коммита");
+            await _botClient.SendTextMessageAsync(chatId, "❌ Ошибка получения деталей коммита", disableNotification: true);
         }
     }
 
