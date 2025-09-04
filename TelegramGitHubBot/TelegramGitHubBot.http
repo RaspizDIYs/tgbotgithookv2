@@ -1,0 +1,6 @@
+@TelegramGitHubBot_HostAddress = http://localhost:5110
+
+GET {{TelegramGitHubBot_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

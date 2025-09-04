@@ -1,0 +1,41 @@
+# Binaries
+bin/
+obj/
+
+# Logs
+*.log
+logs/
+
+# Secrets and configuration
+appsettings.json
+appsettings.*.json
+.env
+.env.local
+.env.production
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Publish output
+publish/
+
+# Docker
+.dockerignore
+
+# User secrets
+secrets.json
+
+# Security check script
+check-secrets.sh
