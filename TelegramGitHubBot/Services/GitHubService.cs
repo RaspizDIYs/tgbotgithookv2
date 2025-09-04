@@ -206,4 +206,84 @@ public class GitHubService
             return $"❌ Ошибка получения CI/CD статусов: {ex.Message}";
         }
     }
+
+    public async Task<string> GetCommitDetailsAsync(string commitSha)
+    {
+        try
+        {
+            var commit = await _client.Repository.Commit.Get(Owner, Repo, commitSha);
+
+            var details = $"📋 *Детали коммита*\n\n" +
+                         $"🔗 SHA: `{commit.Sha}`\n" +
+                         $"👤 Автор: {commit.Commit.Author.Name}\n" +
+                         $"📧 Email: {commit.Commit.Author.Email}\n" +
+                         $"📅 Дата: {commit.Commit.Author.Date:dd.MM.yyyy HH:mm:ss}\n\n" +
+                         $"📝 Сообщение:\n```\n{commit.Commit.Message}\n```\n";
+
+            if (commit.Files?.Any() == true)
+            {
+                details += $"📁 Измененные файлы ({commit.Files.Count}):\n";
+
+                foreach (var file in commit.Files.Take(10)) // Показываем максимум 10 файлов
+                {
+                    var changeType = file.Status switch
+                    {
+                        "added" => "🟢",
+                        "modified" => "🟡",
+                        "removed" => "🔴",
+                        "renamed" => "🔵",
+                        _ => "⚪"
+                    };
+
+                    details += $"{changeType} `{file.Filename}`\n";
+
+                    // Проверяем, был ли файл переименован (если доступно)
+                    try
+                    {
+                        var previousFileName = file.GetType().GetProperty("PreviousFileName")?.GetValue(file) as string;
+                        if (!string.IsNullOrEmpty(previousFileName) && previousFileName != file.Filename)
+                        {
+                            details += $"   ↳ переименован из `{previousFileName}`\n";
+                        }
+                    }
+                    catch
+                    {
+                        // Игнорируем ошибку, если свойство недоступно
+                    }
+                }
+
+                if (commit.Files.Count > 10)
+                {
+                    details += $"... и ещё {commit.Files.Count - 10} файлов\n";
+                }
+
+                // Статистика изменений
+                var additions = commit.Stats?.Additions ?? 0;
+                var deletions = commit.Stats?.Deletions ?? 0;
+                var totalChanges = commit.Stats?.Total ?? 0;
+
+                details += $"\n📊 Статистика:\n" +
+                          $"➕ Добавлено: {additions} строк\n" +
+                          $"➖ Удалено: {deletions} строк\n" +
+                          $"📈 Всего изменений: {totalChanges} строк\n";
+            }
+
+            if (commit.Parents?.Any() == true)
+            {
+                details += $"\n👨‍👩‍👧‍👦 Родительские коммиты:\n";
+                foreach (var parent in commit.Parents.Take(3))
+                {
+                    details += $"• `{parent.Sha[..8]}`\n";
+                }
+            }
+
+            details += $"\n🔗 [Посмотреть на GitHub]({commit.HtmlUrl})";
+
+            return details;
+        }
+        catch (Exception ex)
+        {
+            return $"❌ Ошибка получения деталей коммита {commitSha}: {ex.Message}";
+        }
+    }
 }

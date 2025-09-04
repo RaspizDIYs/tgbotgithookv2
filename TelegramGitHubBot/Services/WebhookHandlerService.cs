@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace TelegramGitHubBot.Services;
 
@@ -8,15 +9,18 @@ public class WebhookHandlerService
 {
     private readonly IConfiguration _configuration;
     private readonly ITelegramBotClient _telegramBotClient;
+    private readonly GitHubService _gitHubService;
     private readonly ILogger<WebhookHandlerService> _logger;
 
     public WebhookHandlerService(
         IConfiguration configuration,
         ITelegramBotClient telegramBotClient,
+        GitHubService gitHubService,
         ILogger<WebhookHandlerService> logger)
     {
         _configuration = configuration;
         _telegramBotClient = telegramBotClient;
+        _gitHubService = gitHubService;
         _logger = logger;
     }
 
@@ -155,8 +159,19 @@ public class WebhookHandlerService
         var pusher = payload.GetProperty("pusher").GetProperty("name").GetString();
         message += $"👤 Автор: {pusher}";
 
+        // Получаем SHA первого коммита для кнопки
+        var firstCommitSha = commits.EnumerateArray().FirstOrDefault().GetProperty("id").GetString();
+
+        var inlineKeyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("📋 Подробно", $"commit_details:{firstCommitSha}:{repoName}")
+            }
+        });
+
         _logger.LogInformation($"📤 Sending message to chat {chatId}: {message.Replace('\n', ' ')}");
-        await SendTelegramMessageAsync(chatId, message);
+        await SendTelegramMessageAsync(chatId, message, inlineKeyboard);
         _logger.LogInformation($"✅ Message sent successfully to chat {chatId}");
     }
 
@@ -276,7 +291,7 @@ public class WebhookHandlerService
         await SendTelegramMessageAsync(chatId, message);
     }
 
-    private async Task SendTelegramMessageAsync(long chatId, string message)
+    private async Task SendTelegramMessageAsync(long chatId, string message, InlineKeyboardMarkup? keyboard = null)
     {
         try
         {
@@ -285,7 +300,8 @@ public class WebhookHandlerService
                 chatId: chatId,
                 text: message,
                 parseMode: ParseMode.Markdown,
-                disableWebPagePreview: true
+                disableWebPagePreview: true,
+                replyMarkup: keyboard
             );
             _logger.LogInformation($"✅ Telegram message sent, MessageId: {result.MessageId}");
         }

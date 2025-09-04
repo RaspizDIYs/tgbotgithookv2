@@ -13,7 +13,7 @@ public class TelegramBotService
     public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService)
     {
         _botClient = botClient;
-        _gitHubService = gitHubService;
+        _gitHubService = gitHubService ?? throw new ArgumentNullException(nameof(gitHubService));
     }
 
     public async Task HandleUpdateAsync(HttpContext context)
@@ -334,13 +334,55 @@ public class TelegramBotService
             // Отвечаем на callback query
             await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id);
 
-            // Обрабатываем команду из callback data
-            await HandleCommandAsync(chatId, data, callbackQuery.From?.Username);
+            // Проверяем, является ли это запросом деталей коммита
+            if (data.StartsWith("commit_details:"))
+            {
+                // Обрабатываем запрос деталей коммита
+                await HandleCommitDetailsCallbackAsync(chatId, data);
+            }
+            else
+            {
+                // Обрабатываем обычную команду из callback data
+                await HandleCommandAsync(chatId, data, callbackQuery.From?.Username);
+            }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Callback query error: {ex.Message}");
             await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Произошла ошибка");
+        }
+    }
+
+    private async Task HandleCommitDetailsCallbackAsync(long chatId, string callbackData)
+    {
+        try
+        {
+            // Разбираем callback data: commit_details:sha:repo
+            var parts = callbackData.Split(':');
+            if (parts.Length < 3)
+            {
+                await _botClient.SendTextMessageAsync(chatId, "❌ Ошибка: некорректные данные коммита");
+                return;
+            }
+
+            var commitSha = parts[1];
+            var repoName = parts[2];
+
+            // Получаем полную информацию о коммите через GitHub API
+            var commitDetails = await _gitHubService.GetCommitDetailsAsync(commitSha);
+
+            // Отправляем подробную информацию
+            await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: commitDetails,
+                parseMode: ParseMode.Markdown,
+                disableWebPagePreview: true
+            );
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting commit details: {ex.Message}");
+            await _botClient.SendTextMessageAsync(chatId, "❌ Ошибка получения деталей коммита");
         }
     }
 }
