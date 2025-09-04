@@ -101,18 +101,46 @@ export GITHUB_PAT="YOUR_PAT"
 
 ### 2. Настройка GitHub Webhook
 
-1. Перейдите в Settings репозитория
-2. Выберите Webhooks → Add webhook
-3. Укажите:
-   - **Payload URL**: `https://your-domain.com/webhook/github`
+1. Перейдите в Settings репозитория [RaspizDIYs/goodluckv2](https://github.com/RaspizDIYs/goodluckv2/settings/hooks)
+2. Выберите **Webhooks → Add webhook**
+3. Укажите настройки:
+   - **Payload URL**: `https://tgbotgithookv2.onrender.com/webhook/github`
    - **Content type**: `application/json`
-   - **Secret**: Ваш webhook secret (опционально)
+   - **Secret**: Оставьте пустым (или укажите в переменной окружения `GITHUB_WEBHOOK_SECRET`)
+   - **SSL verification**: Включено
    - **Events**: Выберите нужные события:
-     - Push
-     - Pull requests
-     - Issues
-     - Releases
-     - Workflow runs
+     - ✅ Push
+     - ✅ Pull requests
+     - ✅ Issues
+     - ✅ Releases
+     - ✅ Workflow runs
+
+4. Нажмите **Add webhook**
+
+### 🔄 Тестирование вебхука
+
+После настройки вебхука:
+1. Сделайте тестовый push в репозиторий
+2. Проверьте логи в Render dashboard
+3. Убедитесь, что бот получает уведомления в Telegram
+
+### 🏥 Проверка статуса бота
+
+**Health Check endpoint:**
+```
+GET https://tgbotgithookv2.onrender.com/health
+```
+
+**Ожидаемый ответ:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-09-04T12:00:00.0000000Z",
+  "version": "1.0.0",
+  "environment": "Production",
+  "service": "TelegramGitHubBot"
+}
+```
 
 ### 3. Настройка Telegram бота
 
@@ -172,6 +200,22 @@ docker run -p 8080:80 -p 8443:443 telegram-github-bot
 
 ### ☁️ Продакшн развертывание
 
+#### 🚀 Render (Текущая настройка)
+
+Ваш бот уже развернут на Render: **https://tgbotgithookv2.onrender.com**
+
+**Настройка переменных окружения в Render:**
+1. Перейдите в Render Dashboard → Your Service → Environment
+2. Добавьте переменные:
+   ```
+   TELEGRAM_BOT_TOKEN = 8416057314:AAFvQhdwgJd1eiEZn6MUckb00d5RxfqOTJA
+   TELEGRAM_CHAT_ID = YOUR_TELEGRAM_CHAT_ID
+   GITHUB_PAT = YOUR_GITHUB_PAT_HERE
+   GITHUB_WEBHOOK_SECRET = YOUR_SECRET_HERE (опционально)
+   ASPNETCORE_ENVIRONMENT = Production
+   ASPNETCORE_URLS = http://+:10000
+   ```
+
 #### Azure App Service
 ```bash
 # Установите переменные окружения в Azure Portal
@@ -181,7 +225,7 @@ docker run -p 8080:80 -p 8443:443 telegram-github-bot
 # ASPNETCORE_ENVIRONMENT = Production
 ```
 
-#### Railway/Render/Heroku
+#### Railway/Heroku
 ```bash
 # Установите переменные окружения в панели управления
 ```

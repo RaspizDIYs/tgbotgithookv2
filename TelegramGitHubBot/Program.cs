@@ -62,6 +62,13 @@ app.MapPost("/webhook/telegram/{token}", async (string token, HttpContext contex
 });
 
 // Health check endpoint
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "healthy",
+    timestamp = DateTime.UtcNow,
+    version = "1.0.0",
+    environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
+    service = "TelegramGitHubBot"
+}));
 
 app.Run();
