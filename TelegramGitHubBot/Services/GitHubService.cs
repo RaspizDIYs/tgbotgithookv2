@@ -214,9 +214,7 @@ public class GitHubService
             var commit = await _client.Repository.Commit.Get(Owner, Repo, commitSha);
 
             var details = $"📋 *Детали коммита*\n\n" +
-                         $"🔗 SHA: `{commit.Sha}`\n" +
                          $"👤 Автор: {commit.Commit.Author.Name}\n" +
-                         $"📧 Email: {commit.Commit.Author.Email}\n" +
                          $"📅 Дата: {commit.Commit.Author.Date:dd.MM.yyyy HH:mm:ss}\n\n" +
                          $"📝 Сообщение:\n```\n{commit.Commit.Message}\n```\n";
 

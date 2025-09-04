@@ -166,13 +166,13 @@ public class WebhookHandlerService
         {
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("📋 Подробно", $"commit_details:{firstCommitSha}:{repoName}")
+                InlineKeyboardButton.WithCallbackData("📋 Подробно", $"commit_details:{firstCommitSha}:{repoName}:details")
             }
         });
 
-        _logger.LogInformation($"📤 Sending message to chat {chatId}: {message.Replace('\n', ' ')}");
-        await SendTelegramMessageAsync(chatId, message, inlineKeyboard);
-        _logger.LogInformation($"✅ Message sent successfully to chat {chatId}");
+        _logger.LogInformation($"📤 Sending push message to chat {chatId}: {message.Replace('\n', ' ')}");
+        var pushMessage = await SendTelegramMessageAsync(chatId, message, inlineKeyboard);
+        _logger.LogInformation($"✅ Push message sent successfully to chat {chatId}, MessageId: {pushMessage?.MessageId}");
     }
 
     private async Task HandlePullRequestEventAsync(JsonElement payload, long chatId)
@@ -291,7 +291,7 @@ public class WebhookHandlerService
         await SendTelegramMessageAsync(chatId, message);
     }
 
-    private async Task SendTelegramMessageAsync(long chatId, string message, InlineKeyboardMarkup? keyboard = null)
+    private async Task<Telegram.Bot.Types.Message?> SendTelegramMessageAsync(long chatId, string message, InlineKeyboardMarkup? keyboard = null)
     {
         try
         {
@@ -304,6 +304,7 @@ public class WebhookHandlerService
                 replyMarkup: keyboard
             );
             _logger.LogInformation($"✅ Telegram message sent, MessageId: {result.MessageId}");
+            return result;
         }
         catch (Exception ex)
         {
@@ -312,6 +313,20 @@ public class WebhookHandlerService
             {
                 _logger.LogError(ex.InnerException, "Inner exception details");
             }
+            return null;
+        }
+    }
+
+    private async Task DeleteTelegramMessageAsync(long chatId, int messageId)
+    {
+        try
+        {
+            await _telegramBotClient.DeleteMessageAsync(chatId, messageId);
+            _logger.LogInformation($"🗑️ Message {messageId} deleted from chat {chatId}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"❌ Error deleting message {messageId} from chat {chatId}: {ex.Message}");
         }
     }
 

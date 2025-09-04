@@ -357,31 +357,57 @@ public class TelegramBotService
     {
         try
         {
-            // Разбираем callback data: commit_details:sha:repo
+            // Разбираем callback data: commit_details:sha:repo:push
             var parts = callbackData.Split(':');
-            if (parts.Length < 3)
+            if (parts.Length < 4)
             {
-                await _botClient.SendTextMessageAsync(chatId, "❌ Ошибка: некорректные данные коммита");
+                await _botClient.SendTextMessageAsync(chatId, "❌ Ошибка: некорректные данные");
                 return;
             }
 
             var commitSha = parts[1];
             var repoName = parts[2];
+            var action = parts[3];
 
-            // Получаем полную информацию о коммите через GitHub API
-            var commitDetails = await _gitHubService.GetCommitDetailsAsync(commitSha);
+            if (action == "details")
+            {
+                // Показываем детали коммита
+                var commitDetails = await _gitHubService.GetCommitDetailsAsync(commitSha);
 
-            // Отправляем подробную информацию
-            await _botClient.SendTextMessageAsync(
-                chatId: chatId,
-                text: commitDetails,
-                parseMode: ParseMode.Markdown,
-                disableWebPagePreview: true
-            );
+                var backKeyboard = new InlineKeyboardMarkup(new[]
+                {
+                    new[]
+                    {
+                        InlineKeyboardButton.WithCallbackData("⬅️ Назад", $"commit_details:{commitSha}:{repoName}:back")
+                    }
+                });
+
+                await _botClient.SendTextMessageAsync(
+                    chatId: chatId,
+                    text: commitDetails,
+                    parseMode: ParseMode.Markdown,
+                    disableWebPagePreview: true,
+                    replyMarkup: backKeyboard
+                );
+            }
+            else if (action == "back")
+            {
+                // Показываем упрощенное сообщение о пуше
+                var backMessage = $"🚀 *Последний пуш в {repoName}*\n\n" +
+                                 $"📦 Коммит: `{commitSha[..8]}`\n" +
+                                 $"🔗 [Посмотреть на GitHub](https://github.com/RaspizDIYs/goodluckv2/commit/{commitSha})";
+
+                await _botClient.SendTextMessageAsync(
+                    chatId: chatId,
+                    text: backMessage,
+                    parseMode: ParseMode.Markdown,
+                    disableWebPagePreview: true
+                );
+            }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error getting commit details: {ex.Message}");
+            Console.WriteLine($"Error handling commit details: {ex.Message}");
             await _botClient.SendTextMessageAsync(chatId, "❌ Ошибка получения деталей коммита");
         }
     }
