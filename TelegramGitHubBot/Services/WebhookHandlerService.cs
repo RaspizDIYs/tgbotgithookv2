@@ -159,16 +159,26 @@ public class WebhookHandlerService
         var pusher = payload.GetProperty("pusher").GetProperty("name").GetString();
         message += $"👤 Автор: {pusher}";
 
-        // Получаем SHA первого коммита для кнопки
-        var firstCommitSha = commits.EnumerateArray().FirstOrDefault().GetProperty("id").GetString();
+        // Получаем SHA первого коммита для кнопки (сокращаем до 8 символов)
+        var firstCommit = commits.EnumerateArray().FirstOrDefault();
+        InlineKeyboardMarkup? inlineKeyboard = null;
 
-        var inlineKeyboard = new InlineKeyboardMarkup(new[]
+        if (firstCommit.TryGetProperty("id", out var idProperty))
         {
-            new[]
+            var firstCommitSha = idProperty.GetString();
+            if (!string.IsNullOrEmpty(firstCommitSha) && firstCommitSha.Length >= 8)
             {
-                InlineKeyboardButton.WithCallbackData("📋 Подробно", $"commit_details:{firstCommitSha}:{repoName}:details")
+                var shortSha = firstCommitSha[..8]; // Берем только первые 8 символов
+
+                inlineKeyboard = new InlineKeyboardMarkup(new[]
+                {
+                    new[]
+                    {
+                        InlineKeyboardButton.WithCallbackData("📋 Подробно", $"cd:{shortSha}:{repoName}:details")
+                    }
+                });
             }
-        });
+        }
 
         _logger.LogInformation($"📤 Sending push message to chat {chatId}: {message.Replace('\n', ' ')}");
         var pushMessage = await SendTelegramMessageAsync(chatId, message, inlineKeyboard);

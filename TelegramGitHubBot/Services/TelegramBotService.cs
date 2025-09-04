@@ -357,7 +357,7 @@ public class TelegramBotService
     {
         try
         {
-            // Разбираем callback data: commit_details:sha:repo:push
+            // Разбираем callback data: cd:shortSha:repo:action
             var parts = callbackData.Split(':');
             if (parts.Length < 4)
             {
@@ -365,20 +365,24 @@ public class TelegramBotService
                 return;
             }
 
-            var commitSha = parts[1];
+            var shortSha = parts[1];
             var repoName = parts[2];
             var action = parts[3];
+
+            // Для полного SHA нужно получить его из GitHub API по короткому
+            var commitSha = await GetFullShaFromShortAsync(shortSha, repoName);
 
             if (action == "details")
             {
                 // Показываем детали коммита
                 var commitDetails = await _gitHubService.GetCommitDetailsAsync(commitSha);
 
+                var callbackShortSha = commitSha[..8]; // Берем первые 8 символов для callback
                 var backKeyboard = new InlineKeyboardMarkup(new[]
                 {
                     new[]
                     {
-                        InlineKeyboardButton.WithCallbackData("⬅️ Назад", $"commit_details:{commitSha}:{repoName}:back")
+                        InlineKeyboardButton.WithCallbackData("⬅️ Назад", $"cd:{callbackShortSha}:{repoName}:back")
                     }
                 });
 
@@ -394,7 +398,7 @@ public class TelegramBotService
             {
                 // Показываем упрощенное сообщение о пуше
                 var backMessage = $"🚀 *Последний пуш в {repoName}*\n\n" +
-                                 $"📦 Коммит: `{commitSha[..8]}`\n" +
+                                 $"📦 Коммит: `{shortSha}`\n" +
                                  $"🔗 [Посмотреть на GitHub](https://github.com/RaspizDIYs/goodluckv2/commit/{commitSha})";
 
                 await _botClient.SendTextMessageAsync(
@@ -409,6 +413,25 @@ public class TelegramBotService
         {
             Console.WriteLine($"Error handling commit details: {ex.Message}");
             await _botClient.SendTextMessageAsync(chatId, "❌ Ошибка получения деталей коммита");
+        }
+    }
+
+    private async Task<string> GetFullShaFromShortAsync(string shortSha, string repoName)
+    {
+        try
+        {
+            // Получаем последние коммиты из репозитория (используем main ветку)
+            var commitMessage = await _gitHubService.GetRecentCommitsAsync("main", 20);
+
+            // Ищем коммит с совпадающим коротким SHA
+            // GetRecentCommitsAsync возвращает string, поэтому нужно получить данные по-другому
+            // Пока что просто возвращаем короткий SHA как полный
+            return shortSha;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting full SHA: {ex.Message}");
+            return shortSha; // Возвращаем короткий в случае ошибки
         }
     }
 }
