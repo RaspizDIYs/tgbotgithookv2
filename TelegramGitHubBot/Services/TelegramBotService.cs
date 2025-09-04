@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -318,20 +319,40 @@ public class TelegramBotService
         }
     }
 
+    private readonly HashSet<string> _processedCallbacks = new HashSet<string>();
+
     public async Task HandleCallbackQueryAsync(CallbackQuery callbackQuery)
     {
         Console.WriteLine($"🎯 HandleCallbackQueryAsync called with data: '{callbackQuery.Data}'");
 
         var chatId = callbackQuery.Message?.Chat.Id ?? 0;
         var data = callbackQuery.Data;
+        var messageId = callbackQuery.Message?.MessageId ?? 0;
 
-        Console.WriteLine($"📍 ChatId: {chatId}, Data: '{data}'");
+        Console.WriteLine($"📍 ChatId: {chatId}, Data: '{data}', MessageId: {messageId}");
 
-        if (chatId == 0 || string.IsNullOrEmpty(data))
+        if (chatId == 0 || string.IsNullOrEmpty(data) || messageId == 0)
         {
             Console.WriteLine("❌ Invalid callback query data");
             await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Ошибка обработки запроса");
             return;
+        }
+
+        // Защита от повторных нажатий
+        var callbackKey = $"{callbackQuery.Id}:{data}";
+        if (_processedCallbacks.Contains(callbackKey))
+        {
+            Console.WriteLine("⚠️ Callback already processed, ignoring");
+            await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Уже обработано");
+            return;
+        }
+
+        _processedCallbacks.Add(callbackKey);
+
+        // Ограничиваем размер множества (чтобы не росло бесконечно)
+        if (_processedCallbacks.Count > 1000)
+        {
+            _processedCallbacks.Clear();
         }
 
         try
@@ -344,6 +365,8 @@ public class TelegramBotService
             if (data.StartsWith("cd:") || data.StartsWith("commit_details:"))
             {
                 Console.WriteLine("📋 Processing commit details request");
+                // Удаляем текущее сообщение
+                await DeleteMessageAsync(chatId, messageId);
                 // Обрабатываем запрос деталей коммита
                 await HandleCommitDetailsCallbackAsync(chatId, data);
             }
@@ -358,6 +381,100 @@ public class TelegramBotService
         {
             Console.WriteLine($"❌ Callback query error: {ex.Message}");
             await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Произошла ошибка");
+        }
+    }
+
+    private async Task DeleteMessageAsync(long chatId, int messageId)
+    {
+        try
+        {
+            await _botClient.DeleteMessageAsync(chatId, messageId);
+            Console.WriteLine($"🗑️ Deleted message {messageId} from chat {chatId}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Failed to delete message {messageId}: {ex.Message}");
+        }
+    }
+
+    private async Task RestorePushMessageAsync(long chatId, string commitSha, string repoName)
+    {
+        try
+        {
+            // Получаем информацию о коммите для восстановления сообщения
+            var commitDetails = await _gitHubService.GetCommitDetailsAsync(commitSha);
+
+            // Извлекаем основную информацию из деталей коммита
+            var author = "Неизвестен";
+            var message = "Коммит";
+            var shortSha = commitSha[..8];
+
+            // Простой парсинг деталей коммита для извлечения автора и сообщения
+            var lines = commitDetails.Split('\n');
+            foreach (var line in lines)
+            {
+                if (line.StartsWith("👤 Автор: "))
+                {
+                    author = line.Replace("👤 Автор: ", "").Trim();
+                }
+                else if (line.StartsWith("📝 Сообщение:"))
+                {
+                    // Следующая строка после "📝 Сообщение:" содержит текст
+                    var messageIndex = Array.IndexOf(lines, line) + 1;
+                    if (messageIndex < lines.Length)
+                    {
+                        message = lines[messageIndex].Trim('`', '*').Replace("```\n", "").Split('\n')[0];
+                        if (message.Length > 50)
+                        {
+                            message = message[..47] + "...";
+                        }
+                    }
+                    break;
+                }
+            }
+
+            // Создаем сообщение в том же формате, что и исходное
+            var pushMessage = $"🚀 *Новый пуш в RaspizDIYs/{repoName}*\n\n" +
+                             $"🌿 Ветка: `main`\n" + // По умолчанию main, так как у нас нет информации о ветке
+                             $"📦 Коммитов: 1\n\n" +
+                             $"🔹 `{shortSha}` - {author}\n" +
+                             $"   {message}\n\n" +
+                             $"👤 Автор: {author}";
+
+            // Создаем кнопку "Подробно"
+            var inlineKeyboard = new InlineKeyboardMarkup(new[]
+            {
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData("📋 Подробно", $"cd:{shortSha}:{repoName}:details")
+                }
+            });
+
+            await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: pushMessage,
+                parseMode: ParseMode.Markdown,
+                disableWebPagePreview: true,
+                replyMarkup: inlineKeyboard
+            );
+
+            Console.WriteLine($"🔄 Restored push message for commit {shortSha}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Failed to restore push message: {ex.Message}");
+
+            // В случае ошибки отправляем упрощенное сообщение
+            var fallbackMessage = $"🚀 *Новый пуш в RaspizDIYs/{repoName}*\n\n" +
+                                 $"📦 Коммит: `{commitSha[..8]}`\n" +
+                                 $"🔗 [Посмотреть на GitHub](https://github.com/RaspizDIYs/goodluckv2/commit/{commitSha})";
+
+            await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: fallbackMessage,
+                parseMode: ParseMode.Markdown,
+                disableWebPagePreview: true
+            );
         }
     }
 
@@ -404,17 +521,8 @@ public class TelegramBotService
             }
             else if (action == "back")
             {
-                // Показываем упрощенное сообщение о пуше
-                var backMessage = $"🚀 *Последний пуш в {repoName}*\n\n" +
-                                 $"📦 Коммит: `{shortSha}`\n" +
-                                 $"🔗 [Посмотреть на GitHub](https://github.com/RaspizDIYs/goodluckv2/commit/{commitSha})";
-
-                await _botClient.SendTextMessageAsync(
-                    chatId: chatId,
-                    text: backMessage,
-                    parseMode: ParseMode.Markdown,
-                    disableWebPagePreview: true
-                );
+                // Восстанавливаем исходное сообщение о пуше с кнопкой
+                await RestorePushMessageAsync(chatId, commitSha, repoName);
             }
         }
         catch (Exception ex)
