@@ -65,12 +65,15 @@ public class WebhookHandlerService
         try
         {
             // Получаем Chat ID из конфигурации или переменной окружения
-            var chatIdStr = _configuration["Telegram:ChatId"] ??
-                           Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID");
+            var configChatId = _configuration["Telegram:ChatId"];
+            var envChatId = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID");
 
-            _logger.LogInformation($"🔍 Chat ID from config: '{_configuration["Telegram:ChatId"]}'");
-            _logger.LogInformation($"🔍 Chat ID from env: '{Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID")}'");
-            _logger.LogInformation($"🔍 Final Chat ID string: '{chatIdStr}'");
+            // Используем env переменную, если она не пустая, иначе config
+            var chatIdStr = !string.IsNullOrWhiteSpace(envChatId) ? envChatId : configChatId;
+
+            _logger.LogInformation($"🔍 Chat ID from config: '{configChatId}' (IsNullOrWhiteSpace: {string.IsNullOrWhiteSpace(configChatId)})");
+            _logger.LogInformation($"🔍 Chat ID from env: '{envChatId}' (IsNullOrWhiteSpace: {string.IsNullOrWhiteSpace(envChatId)})");
+            _logger.LogInformation($"🔍 Final Chat ID string: '{chatIdStr}' (length: {chatIdStr?.Length ?? 0})");
 
             if (string.IsNullOrEmpty(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
             {
