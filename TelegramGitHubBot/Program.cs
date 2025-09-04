@@ -136,6 +136,7 @@ else
     Console.WriteLine("   Please add TELEGRAM_CHAT_ID to your Render environment variables.");
 }
 
+// Register services
 builder.Services.AddSingleton<WebhookHandlerService>();
 
 var app = builder.Build();
