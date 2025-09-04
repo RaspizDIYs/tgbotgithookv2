@@ -74,29 +74,6 @@ public class WebhookHandlerService
             }
 
             switch (eventType)
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error processing GitHub webhook");
-            context.Response.StatusCode = 500;
-        }
-    }
-
-    private async Task ProcessGitHubEventAsync(string eventType, JsonElement payload)
-    {
-        try
-        {
-            // Получаем Chat ID из конфигурации или переменной окружения
-            var chatIdStr = _configuration["Telegram:ChatId"] ??
-                           Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID");
-
-            if (string.IsNullOrEmpty(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
-            {
-                _logger.LogWarning("Telegram Chat ID not configured. Skipping notification.");
-                return;
-            }
-
-            switch (eventType)
             {
                 case "push":
                     await HandlePushEventAsync(payload, chatId);
