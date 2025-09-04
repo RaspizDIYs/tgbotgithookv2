@@ -48,7 +48,9 @@ public class TelegramBotService
         // Отвечаем только на команды, начинающиеся с "/"
         if (text.StartsWith("/"))
         {
-            await HandleCommandAsync(chatId, text, message.From?.Username);
+            // Обрабатываем команды с тегом бота (/command@BotName)
+            var cleanCommand = text.Split('@')[0]; // Убираем @BotName если есть
+            await HandleCommandAsync(chatId, cleanCommand, message.From?.Username);
         }
         // Игнорируем все остальные сообщения (не отвечаем)
     }
@@ -124,17 +126,14 @@ public class TelegramBotService
 
     private async Task SendWelcomeMessageAsync(long chatId)
     {
-        var message = @"
-🤖 *Добро пожаловать в GitHub Monitor Bot!*
+        var message = @"🤖 GitHub Monitor Bot
+Мониторинг репозитория goodluckv2
 
-Я слежу за вашим репозиторием goodluckv2 и уведомляю о всех изменениях.
-
-*Уведомления:*
-• Новые коммиты
-• Pull requests
-• CI/CD статус
-• Релизы
-";
+📢 Уведомления о:
+• Коммитах
+• PR/MR
+• CI/CD
+• Релизах";
 
         var inlineKeyboard = new InlineKeyboardMarkup(new[]
         {
@@ -162,32 +161,21 @@ public class TelegramBotService
         await _botClient.SendTextMessageAsync(
             chatId: chatId,
             text: message,
-            parseMode: ParseMode.Markdown,
             replyMarkup: inlineKeyboard
         );
     }
 
     private async Task SendHelpMessageAsync(long chatId)
     {
-        var message = @"
-📋 *Справка по командам:*
+        var message = @"📋 Команды бота:
 
-*Основные команды:*
-• `/status` - Статус репозитория
-• `/commits [ветка]` - Последние коммиты
-• `/branches` - Список веток
-• `/prs` - Открытые PR
-
-*Дополнительно:*
-• `/ci [ветка]` - CI/CD статус
-• `/deploy [среда]` - Запуск деплоя
-• `/help` - Эта справка
-
-*Примеры:*
-• `/commits` - 5 коммитов из main
-• `/commits develop 10` - 10 из develop
-• `/ci main` - CI/CD для main
-";
+/status - Статус репозитория
+/commits [ветка] - Коммиты
+/branches - Список веток
+/prs - Открытые PR
+/ci [ветка] - CI/CD статус
+/deploy [среда] - Деплой
+/help - Эта справка";
 
         var inlineKeyboard = new InlineKeyboardMarkup(new[]
         {
@@ -215,7 +203,6 @@ public class TelegramBotService
         await _botClient.SendTextMessageAsync(
             chatId: chatId,
             text: message,
-            parseMode: ParseMode.Markdown,
             replyMarkup: inlineKeyboard
         );
     }
