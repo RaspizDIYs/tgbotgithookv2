@@ -29,8 +29,63 @@ Console.WriteLine($"   TELEGRAM_BOT_TOKEN: '{telegramToken?.Substring(0, Math.Mi
 if (!string.IsNullOrWhiteSpace(telegramToken))
 {
     Console.WriteLine($"✅ Telegram Bot Token configured (length: {telegramToken.Length})");
-    builder.Services.AddSingleton<ITelegramBotClient>(new TelegramBotClient(telegramToken.Trim()));
+    var botClient = new TelegramBotClient(telegramToken.Trim());
+    builder.Services.AddSingleton<ITelegramBotClient>(botClient);
     builder.Services.AddSingleton<TelegramBotService>();
+
+    // Start polling in background (only if GitHub is also configured)
+    if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GITHUB_PAT")))
+    {
+        Task.Run(async () =>
+        {
+            try
+            {
+                Console.WriteLine("🔄 Starting Telegram bot polling...");
+                // Create GitHub service for the polling task
+                var githubClient = new GitHubClient(new ProductHeaderValue("TelegramGitHubBot"));
+                var githubPat = Environment.GetEnvironmentVariable("GITHUB_PAT");
+                githubClient.Credentials = new Credentials(githubPat.Trim());
+                var githubService = new GitHubService(githubClient);
+                var telegramService = new TelegramBotService(botClient, githubService);
+
+                while (true)
+                {
+                    try
+                    {
+                        var updates = await botClient.GetUpdatesAsync(offset: -1, timeout: 30);
+                        foreach (var update in updates)
+                        {
+                            if (update.Message != null)
+                            {
+                                await telegramService.HandleMessageAsync(update.Message);
+                            }
+                        }
+
+                        if (updates.Length > 0)
+                        {
+                            var lastUpdateId = updates[^1].Id;
+                            await botClient.GetUpdatesAsync(offset: lastUpdateId + 1);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Polling error: {ex.Message}");
+                        await Task.Delay(5000); // Wait 5 seconds before retry
+                    }
+
+                    await Task.Delay(1000); // Poll every second
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to start polling: {ex.Message}");
+            }
+        });
+    }
+    else
+    {
+        Console.WriteLine("⚠️  WARNING: GitHub PAT not configured - Telegram polling disabled");
+    }
 }
 else
 {
