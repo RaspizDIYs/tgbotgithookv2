@@ -284,4 +284,74 @@ public class GitHubService
             return $"❌ Ошибка получения деталей коммита {commitSha}: {ex.Message}";
         }
     }
+
+    public async Task<(Dictionary<string, int> BranchStats, Dictionary<string, int> AuthorStats)> GetDailyCommitStatsAsync()
+    {
+        try
+        {
+            var branches = await _client.Repository.Branch.GetAll(Owner, Repo);
+            var branchStats = new Dictionary<string, int>();
+            var authorStats = new Dictionary<string, int>();
+            var yesterday = DateTime.UtcNow.AddDays(-1);
+            var today = DateTime.UtcNow;
+
+            foreach (var branch in branches)
+            {
+                try
+                {
+                    var commits = await _client.Repository.Commit.GetAll(Owner, Repo,
+                        new CommitRequest { Sha = branch.Name, Since = yesterday, Until = today });
+
+                    branchStats[branch.Name] = commits.Count;
+
+                    // Собираем статистику по авторам
+                    foreach (var commit in commits)
+                    {
+                        var author = commit.Commit.Author.Name ?? "Неизвестен";
+                        if (authorStats.ContainsKey(author))
+                        {
+                            authorStats[author]++;
+                        }
+                        else
+                        {
+                            authorStats[author] = 1;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error getting commits for branch {branch.Name}: {ex.Message}");
+                    branchStats[branch.Name] = 0;
+                }
+            }
+
+            return (branchStats, authorStats);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting daily commit stats: {ex.Message}");
+            return (new Dictionary<string, int>(), new Dictionary<string, int>());
+        }
+    }
+
+    public async Task<(int Success, int Failure)> GetDailyWorkflowStatsAsync()
+    {
+        try
+        {
+            var yesterday = DateTime.UtcNow.AddDays(-1);
+            var request = new WorkflowRunsRequest { Created = $">{yesterday.ToString("yyyy-MM-ddTHH:mm:ssZ")}" };
+
+            var runs = await _client.Actions.Workflows.Runs.List(Owner, Repo, request);
+
+            var successCount = runs.WorkflowRuns.Count(r => r.Status.StringValue == "completed" && r.Conclusion?.StringValue == "success");
+            var failureCount = runs.WorkflowRuns.Count(r => r.Status.StringValue == "completed" && r.Conclusion?.StringValue == "failure");
+
+            return (successCount, failureCount);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting daily workflow stats: {ex.Message}");
+            return (0, 0);
+        }
+    }
 }

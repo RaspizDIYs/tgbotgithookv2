@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Timers;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -21,11 +22,16 @@ public class TelegramBotService
     private readonly GitHubService _gitHubService;
     private readonly Dictionary<long, NotificationSettings> _chatSettings = new();
     private readonly HashSet<string> _processedCallbacks = new();
+    private readonly Dictionary<string, System.Timers.Timer> _messageTimers = new();
+    private System.Timers.Timer? _dailySummaryTimer;
 
     public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService)
     {
         _botClient = botClient;
         _gitHubService = gitHubService ?? throw new ArgumentNullException(nameof(gitHubService));
+
+        // Настраиваем ежедневную сводку в 18:00 МСК
+        SetupDailySummaryTimer();
     }
 
     public async Task HandleUpdateAsync(HttpContext context)
@@ -136,6 +142,10 @@ public class TelegramBotService
                     }
                     break;
 
+                case "/laststats":
+                    await SendDailySummaryAsync();
+                    break;
+
                 case "/педик":
                     await _botClient.SendTextMessageAsync(chatId, "Сам ты педик", disableNotification: true);
                     break;
@@ -180,6 +190,10 @@ public class TelegramBotService
             {
                 InlineKeyboardButton.WithCallbackData("⚙️ CI/CD", "/ci"),
                 InlineKeyboardButton.WithCallbackData("🚀 Деплой", "/deploy"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("📈 Последняя статистика", "/laststats"),
             },
             new[]
             {
@@ -251,11 +265,12 @@ public class TelegramBotService
         var message = @"📋 Команды бота:
 
 📊 /status - Статус репозитория
-📝 /commits [ветка] - Коммиты
+📝 /commits [ветка] [кол-во] - Коммиты (по умолч. 5)
 🌿 /branches - Список веток
 🔄 /prs - Открытые PR
 ⚙️ /ci [ветка] - CI/CD статус
 🚀 /deploy [среда] - Деплой
+📈 /laststats - Последняя статистика
 ⚙️ /settings - Настройки уведомлений
 📋 /help - Эта справка
 
@@ -283,6 +298,10 @@ public class TelegramBotService
             {
                 InlineKeyboardButton.WithCallbackData("⚙️ CI/CD", "/ci"),
                 InlineKeyboardButton.WithCallbackData("🚀 Деплой", "/deploy"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("📈 Последняя статистика", "/laststats"),
             },
             new[]
             {
@@ -791,6 +810,75 @@ public class TelegramBotService
         return result;
     }
 
+    public void ScheduleMessageDeletion(long chatId, int messageId, int delayMinutes = 30)
+    {
+        var timerKey = $"{chatId}:{messageId}";
+        var timer = new System.Timers.Timer(delayMinutes * 60 * 1000); // Конвертируем минуты в миллисекунды
+
+        timer.Elapsed += async (sender, e) =>
+        {
+            try
+            {
+                Console.WriteLine($"🗑️ Auto-deleting message {messageId} from chat {chatId} after {delayMinutes} minutes");
+                await _botClient.DeleteMessageAsync(chatId, messageId);
+                Console.WriteLine($"✅ Message {messageId} deleted successfully");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Failed to delete message {messageId}: {ex.Message}");
+            }
+            finally
+            {
+                // Очищаем таймер после выполнения
+                timer.Stop();
+                timer.Dispose();
+                _messageTimers.Remove(timerKey);
+            }
+        };
+
+        timer.AutoReset = false; // Одноразовый таймер
+        timer.Start();
+
+        // Сохраняем таймер для возможной отмены
+        _messageTimers[timerKey] = timer;
+
+        Console.WriteLine($"⏰ Scheduled deletion of message {messageId} from chat {chatId} in {delayMinutes} minutes");
+    }
+
+            public void CancelMessageDeletion(long chatId, int messageId)
+        {
+            var timerKey = $"{chatId}:{messageId}";
+            if (_messageTimers.TryGetValue(timerKey, out var timer))
+            {
+                _messageTimers.Remove(timerKey);
+                timer.Stop();
+                timer.Dispose();
+                Console.WriteLine($"🚫 Cancelled deletion of message {messageId} from chat {chatId}");
+            }
+        }
+
+    public async Task SendAutoDeletingMessageAsync(long chatId, string text, int delayMinutes = 30, ParseMode? parseMode = null, IReplyMarkup? replyMarkup = null)
+    {
+        try
+        {
+            var message = await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: text,
+                parseMode: parseMode,
+                disableNotification: true,
+                replyMarkup: replyMarkup
+            );
+
+            // Запланируем удаление сообщения через указанное время
+            ScheduleMessageDeletion(chatId, message.MessageId, delayMinutes);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Failed to send auto-deleting message: {ex.Message}");
+            throw;
+        }
+    }
+
     private async Task<string> GetFullShaFromShortAsync(string shortSha, string repoName)
     {
         try
@@ -807,6 +895,120 @@ public class TelegramBotService
         {
             Console.WriteLine($"Error getting full SHA: {ex.Message}");
             return shortSha; // Возвращаем короткий в случае ошибки
+        }
+    }
+
+    private void SetupDailySummaryTimer()
+    {
+        _dailySummaryTimer = new System.Timers.Timer();
+        if (_dailySummaryTimer != null)
+        {
+            _dailySummaryTimer.Elapsed += async (sender, e) => await SendDailySummaryAsync();
+            _dailySummaryTimer.AutoReset = true;
+
+            // Рассчитываем время до следующего запуска в 18:00 МСК
+            var now = DateTime.Now;
+            var mskTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+            var nowMsk = TimeZoneInfo.ConvertTime(now, mskTimeZone);
+
+            var nextRun = nowMsk.Date.AddHours(18);
+            if (nowMsk >= nextRun)
+            {
+                nextRun = nextRun.AddDays(1);
+            }
+
+            var timeUntilNextRun = nextRun - nowMsk;
+            _dailySummaryTimer.Interval = timeUntilNextRun.TotalMilliseconds;
+
+            _dailySummaryTimer.Start();
+            Console.WriteLine($"⏰ Daily summary timer set to run in {timeUntilNextRun.TotalHours:F1} hours");
+        }
+    }
+
+    private async Task SendDailySummaryAsync()
+    {
+        try
+        {
+            // Получаем статистику
+            var (branchStats, authorStats) = await _gitHubService.GetDailyCommitStatsAsync();
+            var (workflowSuccess, workflowFailure) = await _gitHubService.GetDailyWorkflowStatsAsync();
+
+            // Получаем Chat ID из конфигурации или переменной окружения
+            var configChatId = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID") ??
+                              throw new InvalidOperationException("TELEGRAM_CHAT_ID not configured");
+
+            if (!long.TryParse(configChatId, out var chatId))
+            {
+                Console.WriteLine("❌ Invalid TELEGRAM_CHAT_ID format");
+                return;
+            }
+
+            // Формируем сообщение со сводкой
+            var message = $"📊 *Ежедневная сводка за {DateTime.Now.AddDays(-1):dd.MM.yyyy}*\n\n";
+
+            // Статистика коммитов по веткам
+            message += "📝 *Коммиты по веткам:*\n";
+            var totalCommits = 0;
+
+            foreach (var (branch, count) in branchStats.OrderByDescending(x => x.Value))
+            {
+                if (count > 0)
+                {
+                    message += $"🌿 `{branch}`: {count} коммит{(count != 1 ? "ов" : "")}\n";
+                    totalCommits += count;
+                }
+            }
+
+            if (totalCommits == 0)
+            {
+                message += "😴 Новых коммитов не было\n";
+            }
+            else
+            {
+                message += $"\n📈 *Всего коммитов:* {totalCommits}\n\n";
+
+                // Статистика по авторам
+                message += "👥 *Коммиты по авторам:*\n";
+                foreach (var (author, count) in authorStats.OrderByDescending(x => x.Value))
+                {
+                    message += $"👤 {author}: {count} коммит{(count != 1 ? "ов" : "")}\n";
+                }
+                message += "\n";
+            }
+
+            // Статистика CI/CD
+            message += "⚙️ *CI/CD статусы:*\n";
+            if (workflowSuccess > 0 || workflowFailure > 0)
+            {
+                message += $"✅ Успешных: {workflowSuccess}\n";
+                message += $"❌ Неудачных: {workflowFailure}\n";
+                var totalWorkflows = workflowSuccess + workflowFailure;
+                var successRate = totalWorkflows > 0 ? (double)workflowSuccess / totalWorkflows * 100 : 0;
+                message += $"📊 Процент успеха: {successRate:F1}%\n";
+            }
+            else
+            {
+                message += "😴 CI/CD запусков не было\n";
+            }
+
+            await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: message,
+                parseMode: ParseMode.Markdown,
+                disableNotification: false // Отправляем с уведомлением для ежедневной сводки
+            );
+
+            Console.WriteLine($"✅ Daily summary sent to chat {chatId}");
+
+            // Перепланируем таймер на следующий день (24 часа)
+            if (_dailySummaryTimer != null)
+            {
+                _dailySummaryTimer.Interval = 24 * 60 * 60 * 1000; // 24 часа в миллисекундах
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error sending daily summary: {ex.Message}");
         }
     }
 }
