@@ -143,7 +143,7 @@ public class TelegramBotService
                     break;
 
                 case "/laststats":
-                    await SendDailySummaryAsync();
+                    await SendDailySummaryAsync(chatId);
                     break;
 
                 case "/педик":
@@ -925,7 +925,7 @@ public class TelegramBotService
         }
     }
 
-    private async Task SendDailySummaryAsync()
+    private async Task SendDailySummaryAsync(long? targetChatId = null)
     {
         try
         {
@@ -933,18 +933,29 @@ public class TelegramBotService
             var (branchStats, authorStats) = await _gitHubService.GetDailyCommitStatsAsync();
             var (workflowSuccess, workflowFailure) = await _gitHubService.GetDailyWorkflowStatsAsync();
 
-            // Получаем Chat ID из конфигурации или переменной окружения
-            var configChatId = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID") ??
-                              throw new InvalidOperationException("TELEGRAM_CHAT_ID not configured");
-
-            if (!long.TryParse(configChatId, out var chatId))
+            // Определяем Chat ID: если передан параметр - используем его, иначе получаем из конфигурации
+            long chatId;
+            if (targetChatId.HasValue)
             {
-                Console.WriteLine("❌ Invalid TELEGRAM_CHAT_ID format");
-                return;
+                chatId = targetChatId.Value;
+            }
+            else
+            {
+                var configChatId = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID") ??
+                                  throw new InvalidOperationException("TELEGRAM_CHAT_ID not configured");
+
+                if (!long.TryParse(configChatId, out chatId))
+                {
+                    Console.WriteLine("❌ Invalid TELEGRAM_CHAT_ID format");
+                    return;
+                }
             }
 
             // Формируем сообщение со сводкой
-            var message = $"📊 *Ежедневная сводка за {DateTime.Now.AddDays(-1):dd.MM.yyyy}*\n\n";
+            var title = targetChatId.HasValue
+                ? $"📊 *Запрошенная сводка за {DateTime.Now.AddDays(-1):dd.MM.yyyy}*"
+                : $"📊 *Ежедневная сводка за {DateTime.Now.AddDays(-1):dd.MM.yyyy}*";
+            var message = $"{title}\n\n";
 
             // Статистика коммитов по веткам
             message += "📝 *Коммиты по веткам:*\n";
@@ -995,10 +1006,11 @@ public class TelegramBotService
                 chatId: chatId,
                 text: message,
                 parseMode: ParseMode.Markdown,
-                disableNotification: false // Отправляем с уведомлением для ежедневной сводки
+                disableNotification: targetChatId.HasValue // Без уведомления для запрошенных сводок, с уведомлением для автоматических
             );
 
-            Console.WriteLine($"✅ Daily summary sent to chat {chatId}");
+            var summaryType = targetChatId.HasValue ? "requested" : "automatic";
+            Console.WriteLine($"✅ {summaryType} summary sent to chat {chatId}");
 
             // Перепланируем таймер на следующий день (24 часа)
             if (_dailySummaryTimer != null)
