@@ -110,9 +110,16 @@ public class TelegramBotService
                     break;
 
                 case "/commits":
-                    var branch = parts.Length > 1 ? parts[1] : "main";
-                    var count = parts.Length > 2 && int.TryParse(parts[2], out var c) ? c : 5;
-                    await HandleCommitsCommandAsync(chatId, branch, count);
+                    if (parts.Length > 1)
+                    {
+                        var branch = parts[1];
+                        var count = parts.Length > 2 && int.TryParse(parts[2], out var c) ? c : 5;
+                        await HandleCommitsCommandAsync(chatId, branch, count);
+                    }
+                    else
+                    {
+                        await ShowBranchSelectionAsync(chatId, "commits");
+                    }
                     break;
 
                 case "/branches":
@@ -126,9 +133,16 @@ public class TelegramBotService
 
                 case "/ci":
                 case "/workflows":
-                    var wfBranch = parts.Length > 1 ? parts[1] : null;
-                    var wfCount = parts.Length > 2 && int.TryParse(parts[2], out var wc) ? wc : 5;
-                    await HandleWorkflowsCommandAsync(chatId, wfBranch, wfCount);
+                    if (parts.Length > 1)
+                    {
+                        var wfBranch = parts[1];
+                        var wfCount = parts.Length > 2 && int.TryParse(parts[2], out var wc) ? wc : 5;
+                        await HandleWorkflowsCommandAsync(chatId, wfBranch, wfCount);
+                    }
+                    else
+                    {
+                        await ShowBranchSelectionAsync(chatId, "workflows");
+                    }
                     break;
 
                 case "/deploy":
@@ -144,6 +158,34 @@ public class TelegramBotService
 
                 case "/laststats":
                     await SendDailySummaryAsync(chatId);
+                    break;
+
+                case "/search":
+                    if (parts.Length > 1)
+                    {
+                        var query = string.Join(" ", parts.Skip(1));
+                        await HandleSearchCommandAsync(chatId, query);
+                    }
+                    else
+                    {
+                        await _botClient.SendTextMessageAsync(chatId, "Использование: /search <запрос>\nПример: /search fix bug", disableNotification: true);
+                    }
+                    break;
+
+                case "/authors":
+                    await HandleAuthorsCommandAsync(chatId);
+                    break;
+
+                case "/files":
+                    if (parts.Length > 1)
+                    {
+                        var commitSha = parts[1];
+                        await HandleFilesCommandAsync(chatId, commitSha);
+                    }
+                    else
+                    {
+                        await _botClient.SendTextMessageAsync(chatId, "Использование: /files <sha коммита>", disableNotification: true);
+                    }
                     break;
 
                 case "/педик":
@@ -262,25 +304,28 @@ public class TelegramBotService
 
     private async Task SendHelpMessageAsync(long chatId)
     {
-        var message = @"📋 Команды бота:
+        var message = @"📋 *Команды бота:*
 
 📊 /status - Статус репозитория
-📝 /commits [ветка] [кол-во] - Коммиты (по умолч. 5)
+📝 /commits [ветка] [кол-во] - Коммиты (интерактивно)
 🌿 /branches - Список веток
 🔄 /prs - Открытые PR
-⚙️ /ci [ветка] - CI/CD статус
+⚙️ /ci [ветка] - CI/CD статус (интерактивно)
 🚀 /deploy [среда] - Деплой
 📈 /laststats - Последняя статистика
+
+🔍 *Поиск и анализ:*
+🔎 /search <запрос> - Поиск по коммитам
+👥 /authors - Активные авторы
+📁 /files <sha> - Файлы в коммите
+
+⚙️ *Настройки:*
 ⚙️ /settings - Настройки уведомлений
 📋 /help - Эта справка
 
-💡 *Управление уведомлениями:*
-Используйте /settings для настройки типов уведомлений:
-• Коммиты (новые пуши)
-• PR/MR (pull requests)
-• CI/CD (статус сборок)
-• Релизы (новые версии)
-• Задачи (issues)";
+💡 *Подсказки:*
+• Команды без параметров показывают интерактивное меню
+• Используйте кнопки для быстрой навигации";
 
         var inlineKeyboard = new InlineKeyboardMarkup(new[]
         {
@@ -301,11 +346,16 @@ public class TelegramBotService
             },
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("📈 Последняя статистика", "/laststats"),
+                InlineKeyboardButton.WithCallbackData("📈 Статистика", "/laststats"),
+                InlineKeyboardButton.WithCallbackData("👥 Авторы", "/authors"),
             },
             new[]
             {
+                InlineKeyboardButton.WithCallbackData("🔍 Поиск", "search_menu"),
                 InlineKeyboardButton.WithCallbackData("⚙️ Настройки", "/settings"),
+            },
+            new[]
+            {
                 InlineKeyboardButton.WithCallbackData("🏠 Главное меню", "/start"),
             }
         });
@@ -483,6 +533,16 @@ public class TelegramBotService
                 Console.WriteLine("⚙️ Processing notification toggle request");
                 // Обрабатываем переключение уведомлений
                 await HandleNotificationToggleAsync(chatId, data, messageId);
+            }
+            else if (data.StartsWith("branch_"))
+            {
+                Console.WriteLine("🌿 Processing branch selection");
+                await HandleBranchCallbackAsync(chatId, data, messageId);
+            }
+            else if (data == "search_menu")
+            {
+                Console.WriteLine("🔍 Processing search menu");
+                await ShowSearchMenuAsync(chatId, messageId);
             }
             else
             {
@@ -972,7 +1032,29 @@ public class TelegramBotService
 
             if (totalCommits == 0)
             {
-                message += "😴 Новых коммитов не было\n";
+                // Если нет коммитов - показываем "выходной" с гифкой
+                message = $"🍺 *Выходной! {DateTime.Now.AddDays(-1):dd.MM.yyyy}*\n\n";
+                message += "Никто не коммитил - значит отдыхаем! 🎉\n\n";
+                message += "https://media.giphy.com/media/8Iv5lqKwKsZ2g/giphy.gif\n\n";
+                message += "🍻 Пьём пиво и наслаждаемся жизнью!";
+                
+                // Отправляем сообщение и завершаем функцию
+                await _botClient.SendTextMessageAsync(
+                    chatId: chatId,
+                    text: message,
+                    parseMode: ParseMode.Markdown,
+                    disableNotification: targetChatId.HasValue
+                );
+
+                var weekendSummaryType = targetChatId.HasValue ? "requested" : "automatic";
+                Console.WriteLine($"✅ {weekendSummaryType} weekend summary sent to chat {chatId}");
+
+                // Перепланируем таймер на следующий день только для автоматических сводок
+                if (_dailySummaryTimer != null && !targetChatId.HasValue)
+                {
+                    _dailySummaryTimer.Interval = 24 * 60 * 60 * 1000;
+                }
+                return;
             }
             else
             {
@@ -980,9 +1062,17 @@ public class TelegramBotService
 
                 // Статистика по авторам
                 message += "👥 *Коммиты по авторам:*\n";
-                foreach (var (author, count) in authorStats.OrderByDescending(x => x.Value))
+                foreach (var (author, stats) in authorStats.OrderByDescending(x => x.Value.Commits))
                 {
-                    message += $"👤 {author}: {count} коммит{(count != 1 ? "ов" : "")}\n";
+                    var commitsText = stats.Commits == 1 ? "коммит" : "коммитов";
+                    var changesText = stats.TotalChanges == 1 ? "изменение" : 
+                                     stats.TotalChanges < 5 ? "изменения" : "изменений";
+                    
+                    message += $"👤 {author}: {stats.Commits} {commitsText}\n";
+                    if (stats.TotalChanges > 0)
+                    {
+                        message += $"   📊 +{stats.Additions} -{stats.Deletions} ({stats.TotalChanges} {changesText})\n";
+                    }
                 }
                 message += "\n";
             }
@@ -1012,8 +1102,8 @@ public class TelegramBotService
             var summaryType = targetChatId.HasValue ? "requested" : "automatic";
             Console.WriteLine($"✅ {summaryType} summary sent to chat {chatId}");
 
-            // Перепланируем таймер на следующий день (24 часа)
-            if (_dailySummaryTimer != null)
+            // Перепланируем таймер на следующий день только для автоматических сводок
+            if (_dailySummaryTimer != null && !targetChatId.HasValue)
             {
                 _dailySummaryTimer.Interval = 24 * 60 * 60 * 1000; // 24 часа в миллисекундах
             }
@@ -1021,6 +1111,200 @@ public class TelegramBotService
         catch (Exception ex)
         {
             Console.WriteLine($"❌ Error sending daily summary: {ex.Message}");
+        }
+    }
+
+    private async Task ShowBranchSelectionAsync(long chatId, string action)
+    {
+        try
+        {
+            var branches = await _gitHubService.GetBranchesListAsync();
+            
+            if (!branches.Any())
+            {
+                await _botClient.SendTextMessageAsync(chatId, "❌ Не удалось получить список веток", disableNotification: true);
+                return;
+            }
+
+            var message = action switch
+            {
+                "commits" => "🌿 *Выберите ветку для просмотра коммитов:*",
+                "workflows" => "🌿 *Выберите ветку для просмотра CI/CD:*",
+                _ => "🌿 *Выберите ветку:*"
+            };
+
+            var buttons = new List<InlineKeyboardButton[]>();
+            
+            // Добавляем кнопки для веток (максимум 8)
+            foreach (var branch in branches.Take(8))
+            {
+                var callbackData = action switch
+                {
+                    "commits" => $"branch_commits:{branch}",
+                    "workflows" => $"branch_workflows:{branch}",
+                    _ => $"branch_select:{branch}"
+                };
+                
+                buttons.Add(new[] { InlineKeyboardButton.WithCallbackData($"🌿 {branch}", callbackData) });
+            }
+
+            // Кнопка возврата
+            buttons.Add(new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") });
+
+            var keyboard = new InlineKeyboardMarkup(buttons);
+
+            await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: message,
+                parseMode: ParseMode.Markdown,
+                disableNotification: true,
+                replyMarkup: keyboard
+            );
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения веток: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleSearchCommandAsync(long chatId, string query)
+    {
+        try
+        {
+            var results = await _gitHubService.SearchCommitsAsync(query);
+            
+            if (string.IsNullOrEmpty(results))
+            {
+                await _botClient.SendTextMessageAsync(chatId, $"🔍 По запросу '{query}' ничего не найдено", disableNotification: true);
+                return;
+            }
+
+            var keyboard = new InlineKeyboardMarkup(new[]
+            {
+                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+            });
+
+            await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: results,
+                parseMode: ParseMode.Markdown,
+                disableNotification: true,
+                replyMarkup: keyboard
+            );
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка поиска: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleAuthorsCommandAsync(long chatId)
+    {
+        try
+        {
+            var authors = await _gitHubService.GetActiveAuthorsAsync();
+            
+            var keyboard = new InlineKeyboardMarkup(new[]
+            {
+                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+            });
+
+            await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: authors,
+                parseMode: ParseMode.Markdown,
+                disableNotification: true,
+                replyMarkup: keyboard
+            );
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения авторов: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleFilesCommandAsync(long chatId, string commitSha)
+    {
+        try
+        {
+            var files = await _gitHubService.GetCommitFilesAsync(commitSha);
+            
+            var keyboard = new InlineKeyboardMarkup(new[]
+            {
+                new[] { InlineKeyboardButton.WithCallbackData("📋 Детали коммита", $"cd:{commitSha}:goodluckv2:details") },
+                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+            });
+
+            await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: files,
+                parseMode: ParseMode.Markdown,
+                disableNotification: true,
+                replyMarkup: keyboard
+            );
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения файлов: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleBranchCallbackAsync(long chatId, string callbackData, int messageId)
+    {
+        try
+        {
+            var parts = callbackData.Split(':');
+            if (parts.Length < 2) return;
+
+            var action = parts[0];
+            var branch = parts[1];
+
+            // Удаляем сообщение с выбором ветки
+            await DeleteMessageAsync(chatId, messageId);
+
+            switch (action)
+            {
+                case "branch_commits":
+                    await HandleCommitsCommandAsync(chatId, branch, 5);
+                    break;
+                case "branch_workflows":
+                    await HandleWorkflowsCommandAsync(chatId, branch, 5);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error handling branch callback: {ex.Message}");
+        }
+    }
+
+    private async Task ShowSearchMenuAsync(long chatId, int messageId)
+    {
+        try
+        {
+            var message = "🔍 *Поиск по репозиторию*\n\n" +
+                         "Выберите тип поиска или введите команду:\n\n" +
+                         "📝 `/search <текст>` - поиск по сообщениям коммитов\n" +
+                         "👤 `/authors` - активные авторы\n" +
+                         "📁 `/files <sha>` - файлы в коммите";
+
+            var keyboard = new InlineKeyboardMarkup(new[]
+            {
+                new[] { InlineKeyboardButton.WithCallbackData("👥 Активные авторы", "/authors") },
+                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+            });
+
+            await _botClient.EditMessageTextAsync(
+                chatId: chatId,
+                messageId: messageId,
+                text: message,
+                parseMode: ParseMode.Markdown,
+                replyMarkup: keyboard
+            );
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error showing search menu: {ex.Message}");
         }
     }
 }

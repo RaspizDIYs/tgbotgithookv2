@@ -285,13 +285,21 @@ public class GitHubService
         }
     }
 
-    public async Task<(Dictionary<string, int> BranchStats, Dictionary<string, int> AuthorStats)> GetDailyCommitStatsAsync()
+    public class AuthorStats
+    {
+        public int Commits { get; set; }
+        public int Additions { get; set; }
+        public int Deletions { get; set; }
+        public int TotalChanges => Additions + Deletions;
+    }
+
+    public async Task<(Dictionary<string, int> BranchStats, Dictionary<string, AuthorStats> AuthorStats)> GetDailyCommitStatsAsync()
     {
         try
         {
             var branches = await _client.Repository.Branch.GetAll(Owner, Repo);
             var branchStats = new Dictionary<string, int>();
-            var authorStats = new Dictionary<string, int>();
+            var authorStats = new Dictionary<string, AuthorStats>();
             var yesterday = DateTime.UtcNow.AddDays(-1);
             var today = DateTime.UtcNow;
 
@@ -304,17 +312,31 @@ public class GitHubService
 
                     branchStats[branch.Name] = commits.Count;
 
-                    // Собираем статистику по авторам
+                    // Собираем статистику по авторам с детальной информацией
                     foreach (var commit in commits)
                     {
                         var author = commit.Commit.Author.Name ?? "Неизвестен";
-                        if (authorStats.ContainsKey(author))
+                        
+                        if (!authorStats.ContainsKey(author))
                         {
-                            authorStats[author]++;
+                            authorStats[author] = new AuthorStats();
                         }
-                        else
+
+                        authorStats[author].Commits++;
+
+                        // Получаем детальную информацию о коммите для подсчета изменений
+                        try
                         {
-                            authorStats[author] = 1;
+                            var detailedCommit = await _client.Repository.Commit.Get(Owner, Repo, commit.Sha);
+                            if (detailedCommit.Stats != null)
+                            {
+                                authorStats[author].Additions += detailedCommit.Stats.Additions;
+                                authorStats[author].Deletions += detailedCommit.Stats.Deletions;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error getting detailed commit {commit.Sha}: {ex.Message}");
                         }
                     }
                 }
@@ -330,7 +352,7 @@ public class GitHubService
         catch (Exception ex)
         {
             Console.WriteLine($"Error getting daily commit stats: {ex.Message}");
-            return (new Dictionary<string, int>(), new Dictionary<string, int>());
+            return (new Dictionary<string, int>(), new Dictionary<string, AuthorStats>());
         }
     }
 
@@ -352,6 +374,134 @@ public class GitHubService
         {
             Console.WriteLine($"Error getting daily workflow stats: {ex.Message}");
             return (0, 0);
+        }
+    }
+
+    public async Task<List<string>> GetBranchesListAsync()
+    {
+        try
+        {
+            var branches = await _client.Repository.Branch.GetAll(Owner, Repo);
+            return branches.Select(b => b.Name).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting branches list: {ex.Message}");
+            return new List<string>();
+        }
+    }
+
+    public async Task<string> SearchCommitsAsync(string query, int limit = 10)
+    {
+        try
+        {
+            var commits = await _client.Repository.Commit.GetAll(Owner, Repo, 
+                new CommitRequest(), new ApiOptions { PageSize = 50, PageCount = 1 });
+
+            var filteredCommits = commits
+                .Where(c => c.Commit.Message.Contains(query, StringComparison.OrdinalIgnoreCase))
+                .Take(limit)
+                .ToList();
+
+            if (!filteredCommits.Any())
+                return "";
+
+            var result = $"🔍 *Результаты поиска '{query}':*\n\n";
+
+            foreach (var commit in filteredCommits)
+            {
+                var author = commit.Commit.Author.Name;
+                var message = commit.Commit.Message.Split('\n')[0];
+                var date = commit.Commit.Author.Date;
+                var sha = commit.Sha[..8];
+
+                result += $"🔹 `{sha}` - {author}\n" +
+                         $"   _{message}_\n" +
+                         $"   📅 {date:dd.MM.yyyy HH:mm}\n\n";
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            return $"❌ Ошибка поиска: {ex.Message}";
+        }
+    }
+
+    public async Task<string> GetActiveAuthorsAsync(int days = 30)
+    {
+        try
+        {
+            var since = DateTime.UtcNow.AddDays(-days);
+            var commits = await _client.Repository.Commit.GetAll(Owner, Repo,
+                new CommitRequest { Since = since }, new ApiOptions { PageSize = 100, PageCount = 1 });
+
+            var authorStats = commits
+                .GroupBy(c => c.Commit.Author.Name)
+                .Select(g => new { Author = g.Key, Count = g.Count() })
+                .OrderByDescending(a => a.Count)
+                .Take(10)
+                .ToList();
+
+            if (!authorStats.Any())
+                return "👥 *Активных авторов не найдено*";
+
+            var result = $"👥 *Активные авторы за {days} дней:*\n\n";
+
+            foreach (var author in authorStats)
+            {
+                result += $"👤 {author.Author}: {author.Count} коммит{(author.Count != 1 ? "ов" : "")}\n";
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            return $"❌ Ошибка получения авторов: {ex.Message}";
+        }
+    }
+
+    public async Task<string> GetCommitFilesAsync(string commitSha)
+    {
+        try
+        {
+            var commit = await _client.Repository.Commit.Get(Owner, Repo, commitSha);
+
+            if (commit.Files?.Any() != true)
+                return $"📁 *Файлы в коммите {commitSha[..8]}:*\n\nФайлы не найдены";
+
+            var result = $"📁 *Файлы в коммите {commitSha[..8]}:*\n\n";
+
+            foreach (var file in commit.Files.Take(15))
+            {
+                var changeType = file.Status switch
+                {
+                    "added" => "🟢 Добавлен",
+                    "modified" => "🟡 Изменен",
+                    "removed" => "🔴 Удален",
+                    "renamed" => "🔵 Переименован",
+                    _ => "⚪ Изменен"
+                };
+
+                result += $"{changeType}: `{file.Filename}`\n";
+                
+                if (file.Additions > 0 || file.Deletions > 0)
+                {
+                    result += $"   📊 +{file.Additions} -{file.Deletions}\n";
+                }
+                result += "\n";
+            }
+
+            if (commit.Files.Count > 15)
+            {
+                result += $"... и ещё {commit.Files.Count - 15} файлов\n";
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            return $"❌ Ошибка получения файлов коммита: {ex.Message}";
         }
     }
 }
