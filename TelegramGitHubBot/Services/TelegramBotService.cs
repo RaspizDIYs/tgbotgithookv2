@@ -160,6 +160,18 @@ public class TelegramBotService
                     await SendDailySummaryAsync(chatId);
                     break;
 
+                case "/weekstats":
+                    await ShowWeekSelectionAsync(chatId);
+                    break;
+
+                case "/rating":
+                    await HandleRatingCommandAsync(chatId);
+                    break;
+
+                case "/trends":
+                    await HandleTrendsCommandAsync(chatId);
+                    break;
+
                 case "/search":
                     if (parts.Length > 1)
                     {
@@ -319,6 +331,11 @@ public class TelegramBotService
 👥 /authors - Активные авторы
 📁 /files <sha> - Файлы в коммите
 
+📊 *Расширенная статистика:*
+📈 /weekstats - Статистика по неделям
+🏆 /rating - Рейтинг разработчиков
+📉 /trends - Тренды активности
+
 ⚙️ *Настройки:*
 ⚙️ /settings - Настройки уведомлений
 📋 /help - Эта справка
@@ -348,6 +365,11 @@ public class TelegramBotService
             {
                 InlineKeyboardButton.WithCallbackData("📈 Статистика", "/laststats"),
                 InlineKeyboardButton.WithCallbackData("👥 Авторы", "/authors"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("📊 Недельная статистика", "/weekstats"),
+                InlineKeyboardButton.WithCallbackData("🏆 Рейтинг", "/rating"),
             },
             new[]
             {
@@ -538,6 +560,11 @@ public class TelegramBotService
             {
                 Console.WriteLine("🌿 Processing branch selection");
                 await HandleBranchCallbackAsync(chatId, data, messageId);
+            }
+            else if (data.StartsWith("week_stats:"))
+            {
+                Console.WriteLine("📊 Processing week stats selection");
+                await HandleWeekStatsCallbackAsync(chatId, data, messageId);
             }
             else if (data == "search_menu")
             {
@@ -964,7 +991,7 @@ public class TelegramBotService
         if (_dailySummaryTimer != null)
         {
             _dailySummaryTimer.Elapsed += async (sender, e) => await SendDailySummaryAsync();
-            _dailySummaryTimer.AutoReset = true;
+            _dailySummaryTimer.AutoReset = false; // Отключаем автоповтор
 
             // Рассчитываем время до следующего запуска в 18:00 МСК
             var now = DateTime.Now;
@@ -1011,10 +1038,13 @@ public class TelegramBotService
                 }
             }
 
-            // Формируем сообщение со сводкой
+            // Формируем сообщение со сводкой с учетом МСК
+            var mskTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+            var yesterdayMsk = TimeZoneInfo.ConvertTime(DateTime.UtcNow.AddDays(-1), mskTimeZone);
+            
             var title = targetChatId.HasValue
-                ? $"📊 *Запрошенная сводка за {DateTime.Now.AddDays(-1):dd.MM.yyyy}*"
-                : $"📊 *Ежедневная сводка за {DateTime.Now.AddDays(-1):dd.MM.yyyy}*";
+                ? $"📊 *Запрошенная сводка за {yesterdayMsk:dd.MM.yyyy}*"
+                : $"📊 *Ежедневная сводка за {yesterdayMsk:dd.MM.yyyy}*";
             var message = $"{title}\n\n";
 
             // Статистика коммитов по веткам
@@ -1033,7 +1063,7 @@ public class TelegramBotService
             if (totalCommits == 0)
             {
                 // Если нет коммитов - показываем "выходной" с гифкой
-                message = $"🍺 *Выходной! {DateTime.Now.AddDays(-1):dd.MM.yyyy}*\n\n";
+                message = $"🍺 *Выходной! {yesterdayMsk:dd.MM.yyyy}*\n\n";
                 message += "Никто не коммитил - значит отдыхаем! 🎉\n\n";
                 message += "https://media.giphy.com/media/8Iv5lqKwKsZ2g/giphy.gif\n\n";
                 message += "🍻 Пьём пиво и наслаждаемся жизнью!";
@@ -1052,7 +1082,9 @@ public class TelegramBotService
                 // Перепланируем таймер на следующий день только для автоматических сводок
                 if (_dailySummaryTimer != null && !targetChatId.HasValue)
                 {
+                    _dailySummaryTimer.Stop();
                     _dailySummaryTimer.Interval = 24 * 60 * 60 * 1000;
+                    _dailySummaryTimer.Start();
                 }
                 return;
             }
@@ -1105,7 +1137,9 @@ public class TelegramBotService
             // Перепланируем таймер на следующий день только для автоматических сводок
             if (_dailySummaryTimer != null && !targetChatId.HasValue)
             {
+                _dailySummaryTimer.Stop();
                 _dailySummaryTimer.Interval = 24 * 60 * 60 * 1000; // 24 часа в миллисекундах
+                _dailySummaryTimer.Start();
             }
         }
         catch (Exception ex)
@@ -1305,6 +1339,128 @@ public class TelegramBotService
         catch (Exception ex)
         {
             Console.WriteLine($"❌ Error showing search menu: {ex.Message}");
+        }
+    }
+
+    private async Task ShowWeekSelectionAsync(long chatId)
+    {
+        try
+        {
+            var message = "📊 *Выберите неделю для статистики:*\n\n";
+            
+            var buttons = new List<InlineKeyboardButton[]>();
+            
+            // Добавляем кнопки для последних 4 недель
+            for (int i = 0; i < 4; i++)
+            {
+                var weekStart = DateTime.Now.AddDays(-7 * i - (int)DateTime.Now.DayOfWeek + 1);
+                var weekEnd = weekStart.AddDays(6);
+                var weekText = $"{weekStart:dd.MM} - {weekEnd:dd.MM}";
+                
+                if (i == 0) weekText += " (текущая)";
+                
+                buttons.Add(new[] { InlineKeyboardButton.WithCallbackData($"📅 {weekText}", $"week_stats:{i}") });
+            }
+
+            buttons.Add(new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") });
+
+            var keyboard = new InlineKeyboardMarkup(buttons);
+
+            await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: message,
+                parseMode: ParseMode.Markdown,
+                disableNotification: true,
+                replyMarkup: keyboard
+            );
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка показа недель: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleRatingCommandAsync(long chatId)
+    {
+        try
+        {
+            var rating = await _gitHubService.GetDeveloperRatingAsync();
+            
+            var keyboard = new InlineKeyboardMarkup(new[]
+            {
+                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+            });
+
+            await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: rating,
+                parseMode: ParseMode.Markdown,
+                disableNotification: true,
+                replyMarkup: keyboard
+            );
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения рейтинга: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleTrendsCommandAsync(long chatId)
+    {
+        try
+        {
+            var trends = await _gitHubService.GetActivityTrendsAsync();
+            
+            var keyboard = new InlineKeyboardMarkup(new[]
+            {
+                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+            });
+
+            await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: trends,
+                parseMode: ParseMode.Markdown,
+                disableNotification: true,
+                replyMarkup: keyboard
+            );
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения трендов: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleWeekStatsCallbackAsync(long chatId, string callbackData, int messageId)
+    {
+        try
+        {
+            var parts = callbackData.Split(':');
+            if (parts.Length < 2) return;
+
+            var weekOffset = int.Parse(parts[1]);
+            
+            // Удаляем сообщение с выбором недели
+            await DeleteMessageAsync(chatId, messageId);
+
+            var weekStats = await _gitHubService.GetWeeklyStatsAsync(weekOffset);
+
+            var keyboard = new InlineKeyboardMarkup(new[]
+            {
+                new[] { InlineKeyboardButton.WithCallbackData("📊 Выбрать другую неделю", "/weekstats") },
+                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+            });
+
+            await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: weekStats,
+                parseMode: ParseMode.Markdown,
+                disableNotification: true,
+                replyMarkup: keyboard
+            );
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error handling week stats callback: {ex.Message}");
         }
     }
 }

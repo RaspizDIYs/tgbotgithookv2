@@ -504,4 +504,228 @@ public class GitHubService
             return $"❌ Ошибка получения файлов коммита: {ex.Message}";
         }
     }
+
+    public async Task<string> GetWeeklyStatsAsync(int weekOffset = 0)
+    {
+        try
+        {
+            var mskTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+            var nowMsk = TimeZoneInfo.ConvertTime(DateTime.UtcNow, mskTimeZone);
+            
+            var weekStart = nowMsk.AddDays(-7 * weekOffset - (int)nowMsk.DayOfWeek + 1).Date;
+            var weekEnd = weekStart.AddDays(7);
+
+            var result = $"📊 *Статистика за неделю {weekStart:dd.MM} - {weekEnd.AddDays(-1):dd.MM.yyyy}*\n\n";
+
+            var dailyStats = new Dictionary<string, (int commits, int additions, int deletions)>();
+            
+            // Получаем статистику по дням
+            for (int i = 0; i < 7; i++)
+            {
+                var day = weekStart.AddDays(i);
+                var dayEnd = day.AddDays(1);
+                
+                var commits = await _client.Repository.Commit.GetAll(Owner, Repo,
+                    new CommitRequest { Since = day, Until = dayEnd });
+
+                var dayCommits = 0;
+                var dayAdditions = 0;
+                var dayDeletions = 0;
+
+                foreach (var commit in commits)
+                {
+                    dayCommits++;
+                    try
+                    {
+                        var detailedCommit = await _client.Repository.Commit.Get(Owner, Repo, commit.Sha);
+                        if (detailedCommit.Stats != null)
+                        {
+                            dayAdditions += detailedCommit.Stats.Additions;
+                            dayDeletions += detailedCommit.Stats.Deletions;
+                        }
+                    }
+                    catch { }
+                }
+
+                var dayName = day.ToString("ddd", new System.Globalization.CultureInfo("ru-RU"));
+                dailyStats[dayName] = (dayCommits, dayAdditions, dayDeletions);
+            }
+
+            // График активности по дням
+            result += "📈 *График активности:*\n";
+            var maxCommits = dailyStats.Values.Max(x => x.commits);
+            
+            foreach (var (day, (commits, additions, deletions)) in dailyStats)
+            {
+                var barLength = maxCommits > 0 ? (commits * 10 / maxCommits) : 0;
+                var bar = new string('█', Math.Max(1, barLength));
+                
+                result += $"{day}: {bar} {commits}\n";
+            }
+
+            result += "\n📊 *Детальная статистика:*\n";
+            var totalCommits = dailyStats.Values.Sum(x => x.commits);
+            var totalAdditions = dailyStats.Values.Sum(x => x.additions);
+            var totalDeletions = dailyStats.Values.Sum(x => x.deletions);
+
+            result += $"📝 Всего коммитов: {totalCommits}\n";
+            result += $"➕ Добавлено строк: {totalAdditions}\n";
+            result += $"➖ Удалено строк: {totalDeletions}\n";
+            result += $"📊 Всего изменений: {totalAdditions + totalDeletions}\n\n";
+
+            // Самый активный день
+            var mostActiveDay = dailyStats.OrderByDescending(x => x.Value.commits).First();
+            if (mostActiveDay.Value.commits > 0)
+            {
+                result += $"🔥 Самый активный день: {mostActiveDay.Key} ({mostActiveDay.Value.commits} коммитов)\n";
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            return $"❌ Ошибка получения недельной статистики: {ex.Message}";
+        }
+    }
+
+    public async Task<string> GetDeveloperRatingAsync(int days = 30)
+    {
+        try
+        {
+            var mskTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+            var since = TimeZoneInfo.ConvertTime(DateTime.UtcNow.AddDays(-days), mskTimeZone);
+            
+            var commits = await _client.Repository.Commit.GetAll(Owner, Repo,
+                new CommitRequest { Since = since }, new ApiOptions { PageSize = 200, PageCount = 1 });
+
+            var developerStats = new Dictionary<string, (int commits, int additions, int deletions, double score)>();
+
+            foreach (var commit in commits)
+            {
+                var author = commit.Commit.Author.Name ?? "Неизвестен";
+                
+                if (!developerStats.ContainsKey(author))
+                {
+                    developerStats[author] = (0, 0, 0, 0);
+                }
+
+                var stats = developerStats[author];
+                stats.commits++;
+
+                try
+                {
+                    var detailedCommit = await _client.Repository.Commit.Get(Owner, Repo, commit.Sha);
+                    if (detailedCommit.Stats != null)
+                    {
+                        stats.additions += detailedCommit.Stats.Additions;
+                        stats.deletions += detailedCommit.Stats.Deletions;
+                    }
+                }
+                catch { }
+
+                // Формула рейтинга: коммиты * 10 + изменения * 0.1
+                stats.score = stats.commits * 10 + (stats.additions + stats.deletions) * 0.1;
+                developerStats[author] = stats;
+            }
+
+            var result = $"🏆 *Рейтинг разработчиков за {days} дней:*\n\n";
+
+            var sortedDevelopers = developerStats.OrderByDescending(x => x.Value.score).Take(10);
+            var position = 1;
+
+            foreach (var (author, stats) in sortedDevelopers)
+            {
+                var medal = position switch
+                {
+                    1 => "🥇",
+                    2 => "🥈", 
+                    3 => "🥉",
+                    _ => $"{position}."
+                };
+
+                result += $"{medal} *{author}*\n";
+                result += $"   📊 Баллы: {stats.score:F1}\n";
+                result += $"   📝 Коммиты: {stats.commits}\n";
+                result += $"   📈 Изменения: +{stats.additions} -{stats.deletions}\n\n";
+                
+                position++;
+            }
+
+            result += "💡 *Система баллов:*\n";
+            result += "• 1 коммит = 10 баллов\n";
+            result += "• 1 изменённая строка = 0.1 балла";
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            return $"❌ Ошибка получения рейтинга: {ex.Message}";
+        }
+    }
+
+    public async Task<string> GetActivityTrendsAsync()
+    {
+        try
+        {
+            var mskTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+            var result = "📉 *Тренды активности:*\n\n";
+
+            // Сравниваем последние 2 недели
+            var thisWeekStart = TimeZoneInfo.ConvertTime(DateTime.UtcNow, mskTimeZone).AddDays(-(int)DateTime.UtcNow.DayOfWeek + 1).Date;
+            var lastWeekStart = thisWeekStart.AddDays(-7);
+
+            var thisWeekCommits = await _client.Repository.Commit.GetAll(Owner, Repo,
+                new CommitRequest { Since = thisWeekStart });
+            var lastWeekCommits = await _client.Repository.Commit.GetAll(Owner, Repo,
+                new CommitRequest { Since = lastWeekStart, Until = thisWeekStart });
+
+            var thisWeekCount = thisWeekCommits.Count;
+            var lastWeekCount = lastWeekCommits.Count;
+
+            var trend = thisWeekCount > lastWeekCount ? "📈" : thisWeekCount < lastWeekCount ? "📉" : "➡️";
+            var change = lastWeekCount > 0 ? ((double)(thisWeekCount - lastWeekCount) / lastWeekCount * 100) : 0;
+
+            result += $"📅 *Сравнение недель:*\n";
+            result += $"Эта неделя: {thisWeekCount} коммитов\n";
+            result += $"Прошлая неделя: {lastWeekCount} коммитов\n";
+            result += $"Изменение: {trend} {change:+0.0;-0.0;0}%\n\n";
+
+            // Активность по дням недели (за последний месяц)
+            var monthAgo = thisWeekStart.AddDays(-30);
+            var monthCommits = await _client.Repository.Commit.GetAll(Owner, Repo,
+                new CommitRequest { Since = monthAgo });
+
+            var dayStats = new Dictionary<DayOfWeek, int>();
+            foreach (DayOfWeek day in Enum.GetValues<DayOfWeek>())
+            {
+                dayStats[day] = 0;
+            }
+
+            foreach (var commit in monthCommits)
+            {
+                var commitDate = TimeZoneInfo.ConvertTime(commit.Commit.Author.Date.DateTime, mskTimeZone);
+                dayStats[commitDate.DayOfWeek]++;
+            }
+
+            result += "📊 *Активность по дням недели:*\n";
+            var maxDayCommits = dayStats.Values.Max();
+            
+            var dayNames = new[] { "Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб" };
+            for (int i = 0; i < 7; i++)
+            {
+                var day = (DayOfWeek)i;
+                var commits = dayStats[day];
+                var barLength = maxDayCommits > 0 ? (commits * 10 / maxDayCommits) : 0;
+                var bar = new string('█', Math.Max(1, barLength));
+                
+                result += $"{dayNames[i]}: {bar} {commits}\n";
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            return $"❌ Ошибка получения трендов: {ex.Message}";
+        }
+    }
 }
