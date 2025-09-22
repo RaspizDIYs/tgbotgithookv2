@@ -11,6 +11,7 @@ public class WebhookHandlerService
     private readonly ITelegramBotClient _telegramBotClient;
     private readonly GitHubService _gitHubService;
     private readonly TelegramBotService _telegramBotService;
+    private readonly AchievementService _achievementService;
     private readonly ILogger<WebhookHandlerService> _logger;
 
     public WebhookHandlerService(
@@ -18,12 +19,14 @@ public class WebhookHandlerService
         ITelegramBotClient telegramBotClient,
         GitHubService gitHubService,
         TelegramBotService telegramBotService,
+        AchievementService achievementService,
         ILogger<WebhookHandlerService> logger)
     {
         _configuration = configuration;
         _telegramBotClient = telegramBotClient;
         _gitHubService = gitHubService;
         _telegramBotService = telegramBotService;
+        _achievementService = achievementService;
         _logger = logger;
     }
 
@@ -154,6 +157,35 @@ public class WebhookHandlerService
 
             message += $"🔹 `{sha}` - {author}\n" +
                       $"   _{commitMessage}_\n\n";
+        }
+
+        // Обрабатываем все коммиты для ачивок
+        foreach (var commit in commits.EnumerateArray())
+        {
+            try
+            {
+                var author = commit.GetProperty("author").GetProperty("name").GetString() ?? "Unknown";
+                var email = commit.GetProperty("author").GetProperty("email").GetString() ?? "";
+                var commitMessage = commit.GetProperty("message").GetString() ?? "";
+                var commitDate = commit.GetProperty("timestamp").GetDateTime();
+
+                // Получаем sha из вебхука, чтобы подтянуть реальные additions/deletions у GitHub API
+                var fullSha = commit.GetProperty("id").GetString() ?? string.Empty;
+                int additions = 0;
+                int deletions = 0;
+                if (!string.IsNullOrEmpty(fullSha))
+                {
+                    var stats = await _gitHubService.GetCommitStatsAsync(fullSha);
+                    additions = stats.additions;
+                    deletions = stats.deletions;
+                }
+
+                _achievementService.ProcessCommit(author, email, commitMessage, commitDate, additions, deletions);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка обработки коммита для ачивок");
+            }
         }
 
         if (commits.GetArrayLength() > 3)

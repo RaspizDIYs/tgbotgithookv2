@@ -34,8 +34,9 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
     builder.Services.AddSingleton<ITelegramBotClient>(botClient);
     builder.Services.AddSingleton<TelegramBotService>();
 
-    // Start polling in background (only if GitHub is also configured)
-    if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GITHUB_PAT")))
+    // Start polling in background only when explicitly enabled
+    var enablePolling = (Environment.GetEnvironmentVariable("TELEGRAM_ENABLE_POLLING") ?? "false").Equals("true", StringComparison.OrdinalIgnoreCase);
+    if (enablePolling && !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GITHUB_PAT")))
     {
         Task.Run(async () =>
         {
@@ -50,7 +51,8 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
                     githubClient.Credentials = new Credentials(githubPat.Trim());
                 }
                 var githubService = new GitHubService(githubClient);
-                var telegramService = new TelegramBotService(botClient, githubService);
+                var achievementService = new AchievementService();
+                var telegramService = new TelegramBotService(botClient, githubService, achievementService);
 
                 int? lastUpdateId = null;
 
@@ -139,7 +141,7 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
     }
     else
     {
-        Console.WriteLine("⚠️  WARNING: GitHub PAT not configured - Telegram polling disabled");
+        Console.WriteLine("⚠️  Polling disabled (set TELEGRAM_ENABLE_POLLING=true to enable) or GitHub PAT not configured");
     }
 }
 else
@@ -186,6 +188,7 @@ else
 }
 
 // Register services
+builder.Services.AddSingleton<AchievementService>();
 builder.Services.AddSingleton<WebhookHandlerService>();
 
 var app = builder.Build();
@@ -208,6 +211,14 @@ app.MapPost("/webhook/github", async (HttpContext context, WebhookHandlerService
 // Telegram webhook endpoint
 app.MapPost("/webhook/telegram/{token}", async (string token, HttpContext context, TelegramBotService telegramService) =>
 {
+    var configuredToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN")?.Trim();
+    if (string.IsNullOrWhiteSpace(configuredToken) || !string.Equals(token, configuredToken, StringComparison.Ordinal))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        await context.Response.CompleteAsync();
+        return;
+    }
+
     await telegramService.HandleUpdateAsync(context);
 });
 

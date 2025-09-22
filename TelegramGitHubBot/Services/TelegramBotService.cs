@@ -4,6 +4,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using Telegram.Bot.Types.InputFiles;
 
 namespace TelegramGitHubBot.Services;
 
@@ -20,15 +21,19 @@ public class TelegramBotService
 {
     private readonly ITelegramBotClient _botClient;
     private readonly GitHubService _gitHubService;
+    private readonly AchievementService _achievementService;
     private readonly Dictionary<long, NotificationSettings> _chatSettings = new();
     private readonly HashSet<string> _processedCallbacks = new();
+    private readonly HashSet<int> _processedUpdateIds = new();
+    private readonly Queue<(int id, DateTime ts)> _processedUpdateTimestamps = new();
     private readonly Dictionary<string, System.Timers.Timer> _messageTimers = new();
     private System.Timers.Timer? _dailySummaryTimer;
 
-    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService)
+    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService)
     {
         _botClient = botClient;
         _gitHubService = gitHubService ?? throw new ArgumentNullException(nameof(gitHubService));
+        _achievementService = achievementService ?? throw new ArgumentNullException(nameof(achievementService));
 
         // Настраиваем ежедневную сводку в 18:00 МСК
         SetupDailySummaryTimer();
@@ -40,6 +45,16 @@ public class TelegramBotService
         {
             var update = await context.Request.ReadFromJsonAsync<Update>();
             if (update == null) return;
+
+            // Идемпотентность: отбрасываем уже обработанные update.Id (на случай повторной доставки вебхука)
+            CleanupProcessedUpdates();
+            if (_processedUpdateIds.Contains(update.Id))
+            {
+                Console.WriteLine($"♻️ Duplicate update ignored: {update.Id}");
+                return;
+            }
+            _processedUpdateIds.Add(update.Id);
+            _processedUpdateTimestamps.Enqueue((update.Id, DateTime.UtcNow));
 
             if (update.Message is { } message)
             {
@@ -53,6 +68,25 @@ public class TelegramBotService
         catch (Exception ex)
         {
             Console.WriteLine($"Error handling Telegram update: {ex.Message}");
+        }
+    }
+
+    private void CleanupProcessedUpdates()
+    {
+        // держим максимум 1000 id и TTL 10 минут
+        var cutoff = DateTime.UtcNow.AddMinutes(-10);
+        while (_processedUpdateTimestamps.Count > 0)
+        {
+            var (id, ts) = _processedUpdateTimestamps.Peek();
+            if (_processedUpdateIds.Count > 1000 || ts < cutoff)
+            {
+                _processedUpdateTimestamps.Dequeue();
+                _processedUpdateIds.Remove(id);
+            }
+            else
+            {
+                break;
+            }
         }
     }
 
@@ -200,6 +234,21 @@ public class TelegramBotService
                     }
                     break;
 
+                case "/achivelist":
+                case "/achievements":
+                    await HandleAchievementsCommandAsync(chatId);
+                    break;
+
+                case "/leaderboard":
+                case "/top":
+                    await HandleLeaderboardCommandAsync(chatId);
+                    break;
+
+                case "/streaks":
+                case "/streak":
+                    await HandleStreaksCommandAsync(chatId);
+                    break;
+
                 case "/педик":
                     await _botClient.SendTextMessageAsync(chatId, "Сам ты педик", disableNotification: true);
                     break;
@@ -335,6 +384,11 @@ public class TelegramBotService
 📈 /weekstats - Статистика по неделям
 🏆 /rating - Рейтинг разработчиков
 📉 /trends - Тренды активности
+
+🏆 *Ачивки и рейтинги:*
+🏅 /achivelist - Список всех ачивок
+🥇 /leaderboard - Таблица лидеров
+🔥 /streaks - Топ стриков
 
 ⚙️ *Настройки:*
 ⚙️ /settings - Настройки уведомлений
@@ -1461,6 +1515,166 @@ public class TelegramBotService
         catch (Exception ex)
         {
             Console.WriteLine($"❌ Error handling week stats callback: {ex.Message}");
+        }
+    }
+
+    private async Task HandleAchievementsCommandAsync(long chatId)
+    {
+        try
+        {
+            var achievements = _achievementService.GetAllAchievements();
+            
+            if (!achievements.Any())
+            {
+                await _botClient.SendTextMessageAsync(chatId, "🏆 Пока никто не получил ачивок!\n\nНачните коммитить, чтобы получить первые награды!", disableNotification: true);
+                return;
+            }
+
+            var message = "🏆 *Список ачивок*\n\n";
+            
+            foreach (var achievement in achievements.OrderBy(a => a.Name))
+            {
+                var status = achievement.IsUnlocked ? "✅" : "❌";
+                var holder = achievement.IsUnlocked && !string.IsNullOrEmpty(achievement.HolderName) 
+                    ? $" ({achievement.HolderName})" 
+                    : "";
+                var value = achievement.Value.HasValue ? $" [{achievement.Value}]" : "";
+                
+                message += $"{status} {achievement.Emoji} *{achievement.Name}*\n";
+                message += $"   {achievement.Description}{holder}{value}\n\n";
+            }
+
+            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
+
+            // Отправляем гифки для каждой ачивки
+            foreach (var achievement in achievements.Where(a => a.IsUnlocked))
+            {
+                try
+                {
+                    await _botClient.SendAnimationAsync(
+                        chatId: chatId,
+                        animation: new InputFileUrl(achievement.GifUrl),
+                        caption: $"{achievement.Emoji} *{achievement.Name}*\n{achievement.Description}",
+                        parseMode: ParseMode.Markdown,
+                        disableNotification: true
+                    );
+                    
+                    // Небольшая задержка между гифками
+                    await Task.Delay(1000);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Ошибка отправки гифки для ачивки {achievement.Name}: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения ачивок: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleLeaderboardCommandAsync(long chatId)
+    {
+        try
+        {
+            var topUsers = _achievementService.GetTopUsers(10);
+            var topStreakUsers = _achievementService.GetTopUsersByStreak(5);
+            
+            if (!topUsers.Any())
+            {
+                await _botClient.SendTextMessageAsync(chatId, "📊 Пока нет статистики!\n\nНачните коммитить, чтобы попасть в таблицу лидеров!", disableNotification: true);
+                return;
+            }
+
+            var message = "🏆 *Таблица лидеров*\n\n";
+            
+            // Основная таблица по коммитам
+            message += "📊 *По количеству коммитов:*\n";
+            for (int i = 0; i < topUsers.Count; i++)
+            {
+                var user = topUsers[i];
+                var medal = i switch
+                {
+                    0 => "🥇",
+                    1 => "🥈", 
+                    2 => "🥉",
+                    _ => $"#{i + 1}"
+                };
+                
+                var streakEmoji = _achievementService.GetStreakEmoji(user.LongestStreak);
+                
+                message += $"{medal} *{user.DisplayName}*\n";
+                message += $"   📊 Коммитов: {user.TotalCommits}\n";
+                message += $"   ⚡ Макс. строк: {user.MaxLinesChanged}\n";
+                message += $"   {streakEmoji} Стрик: {user.LongestStreak} дн.\n";
+                message += $"   🧪 Тесты: {user.TestCommits} | 🚀 Релизы: {user.ReleaseCommits}\n";
+                message += $"   🐛 Баги: {user.BugFixCommits} | ✨ Фичи: {user.FeatureCommits}\n\n";
+            }
+
+            // Топ по стрикам
+            if (topStreakUsers.Any())
+            {
+                message += "🔥 *Топ стриков:*\n";
+                for (int i = 0; i < topStreakUsers.Count; i++)
+                {
+                    var user = topStreakUsers[i];
+                    var streakEmoji = _achievementService.GetStreakEmoji(user.LongestStreak);
+                    message += $"{streakEmoji} *{user.DisplayName}* - {user.LongestStreak} дн.\n";
+                }
+            }
+
+            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения таблицы лидеров: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleStreaksCommandAsync(long chatId)
+    {
+        try
+        {
+            var topStreakUsers = _achievementService.GetTopUsersByStreak(10);
+            
+            if (!topStreakUsers.Any())
+            {
+                await _botClient.SendTextMessageAsync(chatId, "🔥 Пока нет стриков!\n\nНачните коммитить каждый день, чтобы создать стрик!", disableNotification: true);
+                return;
+            }
+
+            var message = "🔥 *Топ стриков*\n\n";
+            message += "7 дней подряд - 🔥\n";
+            message += "14 дней подряд - 🔥🔥\n";
+            message += "21 день подряд - 🔥🔥🔥\n";
+            message += "Месяц подряд - 🔥🔥🔥🔥\n\n";
+            
+            for (int i = 0; i < topStreakUsers.Count; i++)
+            {
+                var user = topStreakUsers[i];
+                var medal = i switch
+                {
+                    0 => "🥇",
+                    1 => "🥈", 
+                    2 => "🥉",
+                    _ => $"#{i + 1}"
+                };
+                
+                var streakEmoji = _achievementService.GetStreakEmoji(user.LongestStreak);
+                var currentStreakEmoji = _achievementService.GetStreakEmoji(user.CurrentStreak);
+                
+                message += $"{medal} *{user.DisplayName}*\n";
+                message += $"   {streakEmoji} Лучший стрик: {user.LongestStreak} дн.\n";
+                message += $"   {currentStreakEmoji} Текущий: {user.CurrentStreak} дн.\n";
+                message += $"   📊 Всего коммитов: {user.TotalCommits}\n\n";
+            }
+
+            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения стриков: {ex.Message}", disableNotification: true);
         }
     }
 }

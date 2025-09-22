@@ -285,6 +285,22 @@ public class GitHubService
         }
     }
 
+    public async Task<(int additions, int deletions, int total)> GetCommitStatsAsync(string commitSha)
+    {
+        try
+        {
+            var commit = await _client.Repository.Commit.Get(Owner, Repo, commitSha);
+            var additions = commit.Stats?.Additions ?? 0;
+            var deletions = commit.Stats?.Deletions ?? 0;
+            var total = commit.Stats?.Total ?? additions + deletions;
+            return (additions, deletions, total);
+        }
+        catch
+        {
+            return (0, 0, 0);
+        }
+    }
+
     public class AuthorStats
     {
         public int Commits { get; set; }
