@@ -481,6 +481,46 @@ public class AchievementService
         return _achievements.Values.OrderBy(a => a.Name).ToList();
     }
 
+    // Возвращает полный список из дефиниций, смерженный с текущими состояниями (показывает все ачивки)
+    public List<Achievement> GetAllAchievementsMerged()
+    {
+        var result = new List<Achievement>();
+        foreach (var def in _achievementDefinitions)
+        {
+            if (_achievements.TryGetValue(def.Id, out var ach))
+            {
+                // Обновляем поля из дефиниции (текст/эмодзи/гиф), состояние сохраняем
+                result.Add(new Achievement
+                {
+                    Id = def.Id,
+                    Name = def.Name,
+                    Description = def.Description,
+                    GifUrl = def.GifUrl,
+                    Emoji = def.Emoji,
+                    IsUnlocked = ach.IsUnlocked,
+                    UnlockedAt = ach.UnlockedAt,
+                    HolderUserId = ach.HolderUserId,
+                    HolderName = ach.HolderName,
+                    Value = ach.Value
+                });
+            }
+            else
+            {
+                // Ещё не получена — показываем как заблокированную
+                result.Add(new Achievement
+                {
+                    Id = def.Id,
+                    Name = def.Name,
+                    Description = def.Description,
+                    GifUrl = def.GifUrl,
+                    Emoji = def.Emoji,
+                    IsUnlocked = false
+                });
+            }
+        }
+        return result.OrderBy(a => a.Name).ToList();
+    }
+
     public List<UserStats> GetTopUsers(int count = 10)
     {
         return _userStats.Values
