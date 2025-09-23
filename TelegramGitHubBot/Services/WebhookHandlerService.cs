@@ -208,7 +208,7 @@ public class WebhookHandlerService
                     deletions = stats.deletions;
                 }
 
-                _achievementService.ProcessCommit(author, email, commitMessage, commitDate, additions, deletions);
+                _achievementService.ProcessCommitIfNew(fullSha, author, email, commitMessage, commitDate, additions, deletions);
             }
             catch (Exception ex)
             {

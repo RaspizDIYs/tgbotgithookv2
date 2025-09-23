@@ -286,7 +286,7 @@ try
                             var history = await ghService.GetAllCommitsWithStatsForBranchAsync(br, 300, includeStats: true);
                             foreach (var c in history)
                             {
-                                achService.ProcessCommit(c.Author, c.Email, c.Message, c.Date, c.Additions, c.Deletions);
+                                achService.ProcessCommitIfNew(c.Sha, c.Author, c.Email, c.Message, c.Date, c.Additions, c.Deletions);
                             }
                         }
                         catch (Exception ex)
@@ -320,7 +320,7 @@ try
                             var commits = await ghService.GetRecentCommitsWithStatsAsync(branch, 20, includeStats: false);
                             foreach (var c in commits)
                             {
-                                achService.ProcessCommit(c.Author, c.Email, c.Message, c.Date, c.Additions, c.Deletions);
+                                achService.ProcessCommitIfNew(c.Sha, c.Author, c.Email, c.Message, c.Date, c.Additions, c.Deletions);
                             }
                         }
                         catch (Exception ex)

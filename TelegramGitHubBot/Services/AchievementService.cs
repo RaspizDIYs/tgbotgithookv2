@@ -9,11 +9,14 @@ public class AchievementService
     private readonly Dictionary<string, Achievement> _achievements = new();
     private readonly List<AchievementDefinition> _achievementDefinitions;
     private readonly string _dataFilePath = "user_stats.json";
+    private readonly string _processedShasFilePath = "processed_shas.json";
+    private readonly HashSet<string> _processedShas = new();
 
     public AchievementService()
     {
         _achievementDefinitions = InitializeAchievementDefinitions();
         LoadUserStats();
+        LoadProcessedShas();
     }
 
     private List<AchievementDefinition> InitializeAchievementDefinitions()
@@ -208,7 +211,22 @@ public class AchievementService
     {
         _userStats.Clear();
         _achievements.Clear();
+        _processedShas.Clear();
         SaveUserStats();
+        SaveProcessedShas();
+    }
+
+    public void ProcessCommitIfNew(string sha, string author, string email, string commitMessage, DateTime commitDate, int linesAdded, int linesDeleted)
+    {
+        if (string.IsNullOrWhiteSpace(sha))
+        {
+            ProcessCommit(author, email, commitMessage, commitDate, linesAdded, linesDeleted);
+            return;
+        }
+        if (_processedShas.Contains(sha)) return;
+        ProcessCommit(author, email, commitMessage, commitDate, linesAdded, linesDeleted);
+        _processedShas.Add(sha);
+        SaveProcessedShas();
     }
 
     private long GetOrCreateUserId(string author, string email)
@@ -479,6 +497,39 @@ public class AchievementService
         catch (Exception ex)
         {
             Console.WriteLine($"Ошибка сохранения статистики: {ex.Message}");
+        }
+    }
+
+    private void LoadProcessedShas()
+    {
+        try
+        {
+            if (File.Exists(_processedShasFilePath))
+            {
+                var json = File.ReadAllText(_processedShasFilePath);
+                var data = JsonSerializer.Deserialize<HashSet<string>>(json);
+                if (data != null)
+                {
+                    foreach (var sha in data) _processedShas.Add(sha);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка загрузки обработанных коммитов: {ex.Message}");
+        }
+    }
+
+    private void SaveProcessedShas()
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(_processedShas, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(_processedShasFilePath, json);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка сохранения обработанных коммитов: {ex.Message}");
         }
     }
 }
