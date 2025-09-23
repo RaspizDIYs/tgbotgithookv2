@@ -699,24 +699,42 @@ public class TelegramBotService
         {
             if (messageIdToEdit.HasValue && messageIdToEdit.Value != 0)
             {
-                // Редактируем существующую анимацию/сообщение
-                var media = new Telegram.Bot.Types.InputFiles.InputMediaAnimation(InputFile.FromUri(a.GifUrl))
-                {
-                    Caption = caption,
-                    ParseMode = ParseMode.Markdown
-                };
-                await _botClient.EditMessageMediaAsync(chatId, messageIdToEdit.Value, media, keyboard);
+                // Удаляем предыдущее сообщение, чтобы избежать ограничений редактирования media
+                await DeleteMessageAsync(chatId, messageIdToEdit.Value);
             }
-            else
+
+            var url = a.GifUrl?.Trim() ?? string.Empty;
+            try
             {
                 await _botClient.SendAnimationAsync(
                     chatId: chatId,
-                    animation: InputFile.FromUri(a.GifUrl),
+                    animation: InputFile.FromUri(url),
                     caption: caption,
                     parseMode: ParseMode.Markdown,
                     disableNotification: true,
                     replyMarkup: keyboard
                 );
+            }
+            catch (Telegram.Bot.Exceptions.ApiRequestException apiEx)
+            {
+                // Авто-фолбэк: если это .gif с media.tenor.com, попробуем .mp4
+                if (url.Contains("media.tenor.com") && url.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+                {
+                    var mp4Url = url[..^4] + ".mp4";
+                    Console.WriteLine($"⚠️ GIF failed, retrying MP4: {mp4Url}. Error: {apiEx.Message}");
+                    await _botClient.SendAnimationAsync(
+                        chatId: chatId,
+                        animation: InputFile.FromUri(mp4Url),
+                        caption: caption,
+                        parseMode: ParseMode.Markdown,
+                        disableNotification: true,
+                        replyMarkup: keyboard
+                    );
+                }
+                else
+                {
+                    throw;
+                }
             }
         }
         catch (Exception ex)
@@ -725,7 +743,7 @@ public class TelegramBotService
             // Фоллбек: текст без гифки
             if (messageIdToEdit.HasValue && messageIdToEdit.Value != 0)
             {
-                await _botClient.EditMessageTextAsync(chatId, messageIdToEdit.Value, caption, ParseMode.Markdown, replyMarkup: keyboard);
+                await _botClient.EditMessageTextAsync(chatId, messageIdToEdit.Value, caption, parseMode: ParseMode.Markdown, replyMarkup: keyboard);
             }
             else
             {
