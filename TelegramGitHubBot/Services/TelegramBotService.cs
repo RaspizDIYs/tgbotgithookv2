@@ -747,7 +747,7 @@ public class TelegramBotService
             }
             else
             {
-                await _botClient.SendTextMessageAsync(chatId, caption, ParseMode.Markdown, disableNotification: true, replyMarkup: keyboard);
+                await _botClient.SendTextMessageAsync(chatId, caption, parseMode: ParseMode.Markdown, disableNotification: true, replyMarkup: keyboard);
             }
         }
     }
