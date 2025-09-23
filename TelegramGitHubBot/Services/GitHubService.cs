@@ -5,12 +5,18 @@ namespace TelegramGitHubBot.Services;
 public class GitHubService
 {
     private readonly GitHubClient _client;
-    private const string Owner = "RaspizDIYs";
-    private const string Repo = "goodluckv2";
+    private readonly string _owner;
+    private readonly string _repo;
+
+    public string OwnerName => _owner;
+    public string RepoName => _repo;
 
     public GitHubService(GitHubClient client)
     {
         _client = client;
+        _owner = Environment.GetEnvironmentVariable("GITHUB_OWNER")?.Trim() ?? "RaspizDIYs";
+        _repo = Environment.GetEnvironmentVariable("GITHUB_REPO")?.Trim() ?? "goodluckv2";
+        Console.WriteLine($"🔧 GitHubService configured for {_owner}/{_repo}");
     }
 
     public class GitCommitInfo
@@ -128,8 +134,8 @@ public class GitHubService
     {
         try
         {
-            var repository = await _client.Repository.Get(Owner, Repo);
-            var branches = await _client.Repository.Branch.GetAll(Owner, Repo);
+            var repository = await _client.Repository.Get(_owner, _repo);
+            var branches = await _client.Repository.Branch.GetAll(_owner, _repo);
             var defaultBranch = branches.FirstOrDefault(b => b.Name == repository.DefaultBranch);
 
             var status = $"📊 *Статус репозитория {Owner}/{Repo}*\n\n" +
@@ -143,7 +149,7 @@ public class GitHubService
 
             if (defaultBranch?.Commit != null)
             {
-                var latestCommit = await _client.Repository.Commit.Get(Owner, Repo, defaultBranch.Commit.Sha);
+                var latestCommit = await _client.Repository.Commit.Get(_owner, _repo, defaultBranch.Commit.Sha);
                 status += $"\n📝 Последний коммит:\n" +
                          $"• SHA: `{latestCommit.Sha[..8]}`\n" +
                          $"• Автор: {latestCommit.Commit.Author.Name}\n" +
@@ -163,7 +169,7 @@ public class GitHubService
     {
         try
         {
-            var commits = await _client.Repository.Commit.GetAll(Owner, Repo,
+            var commits = await _client.Repository.Commit.GetAll(_owner, _repo,
                 new CommitRequest { Sha = branch }, new ApiOptions { PageSize = count, PageCount = 1 });
 
             if (!commits.Any())
@@ -195,8 +201,8 @@ public class GitHubService
     {
         try
         {
-            var branches = await _client.Repository.Branch.GetAll(Owner, Repo);
-            var repository = await _client.Repository.Get(Owner, Repo);
+            var branches = await _client.Repository.Branch.GetAll(_owner, _repo);
+            var repository = await _client.Repository.Get(_owner, _repo);
             var defaultBranch = repository.DefaultBranch;
 
             var result = $"🌿 *Ветки репозитория {Owner}/{Repo}:*\n\n";
@@ -212,7 +218,7 @@ public class GitHubService
                 {
                     try
                     {
-                        var commit = await _client.Repository.Commit.Get(Owner, Repo, branch.Commit.Sha);
+                        var commit = await _client.Repository.Commit.Get(_owner, _repo, branch.Commit.Sha);
                         result += $"   📝 {commit.Commit.Author.Name}: {commit.Commit.Message.Split('\n')[0]}\n" +
                                  $"   📅 {commit.Commit.Author.Date:dd.MM.yyyy HH:mm}\n\n";
                     }
@@ -235,7 +241,7 @@ public class GitHubService
     {
         try
         {
-            var prs = await _client.PullRequest.GetAllForRepository(Owner, Repo,
+            var prs = await _client.PullRequest.GetAllForRepository(_owner, _repo,
                 new PullRequestRequest { State = ItemStateFilter.Open });
 
             if (!prs.Any())
@@ -279,7 +285,7 @@ public class GitHubService
             if (!string.IsNullOrEmpty(branch))
                 request.Branch = branch!;
 
-            var runs = await _client.Actions.Workflows.Runs.List(Owner, Repo, request,
+            var runs = await _client.Actions.Workflows.Runs.List(_owner, _repo, request,
                 new ApiOptions { PageSize = count, PageCount = 1 });
 
             if (!runs.WorkflowRuns.Any())
@@ -322,7 +328,7 @@ public class GitHubService
     {
         try
         {
-            var commit = await _client.Repository.Commit.Get(Owner, Repo, commitSha);
+            var commit = await _client.Repository.Commit.Get(_owner, _repo, commitSha);
 
             var details = $"📋 *Детали коммита*\n\n" +
                          $"👤 Автор: {commit.Commit.Author.Name}\n" +
@@ -400,7 +406,7 @@ public class GitHubService
     {
         try
         {
-            var commit = await _client.Repository.Commit.Get(Owner, Repo, commitSha);
+            var commit = await _client.Repository.Commit.Get(_owner, _repo, commitSha);
             var additions = commit.Stats?.Additions ?? 0;
             var deletions = commit.Stats?.Deletions ?? 0;
             var total = commit.Stats?.Total ?? additions + deletions;
@@ -424,7 +430,7 @@ public class GitHubService
     {
         try
         {
-            var branches = await _client.Repository.Branch.GetAll(Owner, Repo);
+            var branches = await _client.Repository.Branch.GetAll(_owner, _repo);
             var branchStats = new Dictionary<string, int>();
             var authorStats = new Dictionary<string, AuthorStats>();
             var yesterday = DateTime.UtcNow.AddDays(-1);
@@ -434,7 +440,7 @@ public class GitHubService
             {
                 try
                 {
-                    var commits = await _client.Repository.Commit.GetAll(Owner, Repo,
+                    var commits = await _client.Repository.Commit.GetAll(_owner, _repo,
                         new CommitRequest { Sha = branch.Name, Since = yesterday, Until = today });
 
                     branchStats[branch.Name] = commits.Count;
@@ -454,7 +460,7 @@ public class GitHubService
                         // Получаем детальную информацию о коммите для подсчета изменений
                         try
                         {
-                            var detailedCommit = await _client.Repository.Commit.Get(Owner, Repo, commit.Sha);
+                            var detailedCommit = await _client.Repository.Commit.Get(_owner, _repo, commit.Sha);
                             if (detailedCommit.Stats != null)
                             {
                                 authorStats[author].Additions += detailedCommit.Stats.Additions;
@@ -490,7 +496,7 @@ public class GitHubService
             var yesterday = DateTime.UtcNow.AddDays(-1);
             var request = new WorkflowRunsRequest { Created = $">{yesterday.ToString("yyyy-MM-ddTHH:mm:ssZ")}" };
 
-            var runs = await _client.Actions.Workflows.Runs.List(Owner, Repo, request);
+            var runs = await _client.Actions.Workflows.Runs.List(_owner, _repo, request);
 
             var successCount = runs.WorkflowRuns.Count(r => r.Status.StringValue == "completed" && r.Conclusion?.StringValue == "success");
             var failureCount = runs.WorkflowRuns.Count(r => r.Status.StringValue == "completed" && r.Conclusion?.StringValue == "failure");
@@ -508,7 +514,7 @@ public class GitHubService
     {
         try
         {
-            var branches = await _client.Repository.Branch.GetAll(Owner, Repo);
+            var branches = await _client.Repository.Branch.GetAll(_owner, _repo);
             return branches.Select(b => b.Name).ToList();
         }
         catch (Exception ex)
@@ -536,7 +542,7 @@ public class GitHubService
     {
         try
         {
-            var commits = await _client.Repository.Commit.GetAll(Owner, Repo, 
+            var commits = await _client.Repository.Commit.GetAll(_owner, _repo, 
                 new CommitRequest(), new ApiOptions { PageSize = 50, PageCount = 1 });
 
             var filteredCommits = commits
@@ -574,7 +580,7 @@ public class GitHubService
         try
         {
             var since = DateTime.UtcNow.AddDays(-days);
-            var commits = await _client.Repository.Commit.GetAll(Owner, Repo,
+            var commits = await _client.Repository.Commit.GetAll(_owner, _repo,
                 new CommitRequest { Since = since }, new ApiOptions { PageSize = 100, PageCount = 1 });
 
             var authorStats = commits
@@ -755,7 +761,7 @@ public class GitHubService
 
                 try
                 {
-                    var detailedCommit = await _client.Repository.Commit.Get(Owner, Repo, commit.Sha);
+                    var detailedCommit = await _client.Repository.Commit.Get(_owner, _repo, commit.Sha);
                     if (detailedCommit.Stats != null)
                     {
                         stats.additions += detailedCommit.Stats.Additions;
@@ -815,9 +821,9 @@ public class GitHubService
             var thisWeekStart = TimeZoneInfo.ConvertTime(DateTime.UtcNow, mskTimeZone).AddDays(-(int)DateTime.UtcNow.DayOfWeek + 1).Date;
             var lastWeekStart = thisWeekStart.AddDays(-7);
 
-            var thisWeekCommits = await _client.Repository.Commit.GetAll(Owner, Repo,
+            var thisWeekCommits = await _client.Repository.Commit.GetAll(_owner, _repo,
                 new CommitRequest { Since = thisWeekStart });
-            var lastWeekCommits = await _client.Repository.Commit.GetAll(Owner, Repo,
+            var lastWeekCommits = await _client.Repository.Commit.GetAll(_owner, _repo,
                 new CommitRequest { Since = lastWeekStart, Until = thisWeekStart });
 
             var thisWeekCount = thisWeekCommits.Count;
@@ -833,7 +839,7 @@ public class GitHubService
 
             // Активность по дням недели (за последний месяц)
             var monthAgo = thisWeekStart.AddDays(-30);
-            var monthCommits = await _client.Repository.Commit.GetAll(Owner, Repo,
+            var monthCommits = await _client.Repository.Commit.GetAll(_owner, _repo,
                 new CommitRequest { Since = monthAgo });
 
             var dayStats = new Dictionary<DayOfWeek, int>();
