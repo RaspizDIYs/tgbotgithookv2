@@ -1130,20 +1130,48 @@ public class TelegramBotService
             {
                 // Если нет коммитов - показываем "выходной" с гифкой
                 message = $"🍺 *Выходной! {yesterdayMsk:dd.MM.yyyy}*\n\n";
-                message += "Никто не коммитил - значит отдыхаем! 🎉\n\n";
-                message += "https://media.giphy.com/media/8Iv5lqKwKsZ2g/giphy.gif\n\n";
+                message += "Никто не коммитил — значит отдыхаем! 🎉\n\n";
                 message += "🍻 Пьём пиво и наслаждаемся жизнью!";
                 
-                // Отправляем сообщение и завершаем функцию
-                await _botClient.SendTextMessageAsync(
-                    chatId: chatId,
-                    text: message,
-                    parseMode: ParseMode.Markdown,
-                    disableNotification: targetChatId.HasValue
-                );
-
-                var weekendSummaryType = targetChatId.HasValue ? "requested" : "automatic";
-                Console.WriteLine($"✅ {weekendSummaryType} weekend summary sent to chat {chatId}");
+                // Пробуем отправить анимацию с Tenor (URL из переменной окружения TENOR_WEEKEND_GIF)
+                var weekendGif = Environment.GetEnvironmentVariable("TENOR_WEEKEND_GIF");
+                if (!string.IsNullOrWhiteSpace(weekendGif))
+                {
+                    try
+                    {
+                        await _botClient.SendAnimationAsync(
+                            chatId: chatId,
+                            animation: InputFile.FromUri(weekendGif.Trim()),
+                            caption: message,
+                            parseMode: ParseMode.Markdown,
+                            disableNotification: targetChatId.HasValue
+                        );
+                        var weekendSummaryType = targetChatId.HasValue ? "requested" : "automatic";
+                        Console.WriteLine($"✅ {weekendSummaryType} weekend summary sent to chat {chatId} (Tenor GIF)");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"⚠️ Failed to send Tenor GIF: {ex.Message}. Sending text fallback.");
+                        await _botClient.SendTextMessageAsync(
+                            chatId: chatId,
+                            text: message,
+                            parseMode: ParseMode.Markdown,
+                            disableNotification: targetChatId.HasValue
+                        );
+                    }
+                }
+                else
+                {
+                    // Fallback только текст, без внешних хостов
+                    await _botClient.SendTextMessageAsync(
+                        chatId: chatId,
+                        text: message,
+                        parseMode: ParseMode.Markdown,
+                        disableNotification: targetChatId.HasValue
+                    );
+                    var weekendSummaryType = targetChatId.HasValue ? "requested" : "automatic";
+                    Console.WriteLine($"✅ {weekendSummaryType} weekend summary sent to chat {chatId} (text only)");
+                }
 
                 // Перепланируем таймер на следующий день только для автоматических сводок
                 if (_dailySummaryTimer != null && !targetChatId.HasValue)
@@ -1558,7 +1586,7 @@ public class TelegramBotService
 
             await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
 
-            // Отправляем гифки для каждой ачивки
+            // Отправляем гифки для каждой ачивки (Tenor URL поддерживается Telegram без API)
             foreach (var achievement in achievements.Where(a => a.IsUnlocked))
             {
                 try
