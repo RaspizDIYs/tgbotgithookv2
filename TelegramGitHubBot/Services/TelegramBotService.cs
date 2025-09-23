@@ -731,9 +731,11 @@ public class TelegramBotService
             Console.WriteLine($"❌ Failed to restore push message: {ex.Message}");
 
             // В случае ошибки отправляем упрощенное сообщение
-            var fallbackMessage = $"🚀 *Новый пуш в RaspizDIYs/{repoName}*\n\n" +
+            var owner = _gitHubService.OwnerName;
+            var repo = _gitHubService.RepoName;
+            var fallbackMessage = $"🚀 *Новый пуш в {owner}/{repoName}*\n\n" +
                                  $"📦 Коммит: `{commitSha[..8]}`\n" +
-                                 $"🔗 [Посмотреть на GitHub](https://github.com/RaspizDIYs/goodluckv2/commit/{commitSha})";
+                                 $"🔗 [Посмотреть на GitHub](https://github.com/{owner}/{repo}/commit/{commitSha})";
 
             await _botClient.SendTextMessageAsync(
                 chatId: chatId,
