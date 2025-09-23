@@ -35,7 +35,7 @@ public class GitHubService
         var result = new List<GitCommitInfo>();
         try
         {
-            var commits = await _client.Repository.Commit.GetAll(Owner, Repo,
+            var commits = await _client.Repository.Commit.GetAll(_owner, _repo,
                 new CommitRequest { Sha = branch }, new ApiOptions { PageSize = count, PageCount = 1 });
 
             foreach (var c in commits.Take(count))
@@ -48,7 +48,7 @@ public class GitHubService
                 int additions = 0, deletions = 0;
                 try
                 {
-                    var detailed = await _client.Repository.Commit.Get(Owner, Repo, c.Sha);
+                    var detailed = await _client.Repository.Commit.Get(_owner, _repo, c.Sha);
                     additions = detailed.Stats?.Additions ?? 0;
                     deletions = detailed.Stats?.Deletions ?? 0;
                 }
@@ -83,7 +83,7 @@ public class GitHubService
             const int pageSize = 100;
             while (all.Count < maxCommits)
             {
-                var commits = await _client.Repository.Commit.GetAll(Owner, Repo,
+                var commits = await _client.Repository.Commit.GetAll(_owner, _repo,
                     new CommitRequest { Sha = branch },
                     new ApiOptions { PageSize = pageSize, PageCount = 1, StartPage = page });
 
@@ -101,7 +101,7 @@ public class GitHubService
                     int additions = 0, deletions = 0;
                     try
                     {
-                        var detailed = await _client.Repository.Commit.Get(Owner, Repo, c.Sha);
+                        var detailed = await _client.Repository.Commit.Get(_owner, _repo, c.Sha);
                         additions = detailed.Stats?.Additions ?? 0;
                         deletions = detailed.Stats?.Deletions ?? 0;
                     }
@@ -138,7 +138,7 @@ public class GitHubService
             var branches = await _client.Repository.Branch.GetAll(_owner, _repo);
             var defaultBranch = branches.FirstOrDefault(b => b.Name == repository.DefaultBranch);
 
-            var status = $"📊 *Статус репозитория {Owner}/{Repo}*\n\n" +
+            var status = $"📊 *Статус репозитория {_owner}/{_repo}*\n\n" +
                         $"🌟 Звезды: {repository.StargazersCount}\n" +
                         $"🍴 Форки: {repository.ForksCount}\n" +
                         $"📂 Размер: {repository.Size} KB\n" +
@@ -205,7 +205,7 @@ public class GitHubService
             var repository = await _client.Repository.Get(_owner, _repo);
             var defaultBranch = repository.DefaultBranch;
 
-            var result = $"🌿 *Ветки репозитория {Owner}/{Repo}:*\n\n";
+            var result = $"🌿 *Ветки репозитория {_owner}/{_repo}:*\n\n";
 
             foreach (var branch in branches.OrderByDescending(b => b.Name == defaultBranch))
             {
@@ -528,7 +528,7 @@ public class GitHubService
     {
         try
         {
-            var repo = await _client.Repository.Get(Owner, Repo);
+            var repo = await _client.Repository.Get(_owner, _repo);
             return repo.DefaultBranch;
         }
         catch (Exception ex)
@@ -612,7 +612,7 @@ public class GitHubService
     {
         try
         {
-            var commit = await _client.Repository.Commit.Get(Owner, Repo, commitSha);
+            var commit = await _client.Repository.Commit.Get(_owner, _repo, commitSha);
 
             if (commit.Files?.Any() != true)
                 return $"📁 *Файлы в коммите {commitSha[..8]}:*\n\nФайлы не найдены";
@@ -672,7 +672,7 @@ public class GitHubService
                 var day = weekStart.AddDays(i);
                 var dayEnd = day.AddDays(1);
                 
-                var commits = await _client.Repository.Commit.GetAll(Owner, Repo,
+                var commits = await _client.Repository.Commit.GetAll(_owner, _repo,
                     new CommitRequest { Since = day, Until = dayEnd });
 
                 var dayCommits = 0;
@@ -684,7 +684,7 @@ public class GitHubService
                     dayCommits++;
                     try
                     {
-                        var detailedCommit = await _client.Repository.Commit.Get(Owner, Repo, commit.Sha);
+                        var detailedCommit = await _client.Repository.Commit.Get(_owner, _repo, commit.Sha);
                         if (detailedCommit.Stats != null)
                         {
                             dayAdditions += detailedCommit.Stats.Additions;
@@ -742,7 +742,7 @@ public class GitHubService
             var mskTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
             var since = TimeZoneInfo.ConvertTime(DateTime.UtcNow.AddDays(-days), mskTimeZone);
             
-            var commits = await _client.Repository.Commit.GetAll(Owner, Repo,
+            var commits = await _client.Repository.Commit.GetAll(_owner, _repo,
                 new CommitRequest { Since = since }, new ApiOptions { PageSize = 200, PageCount = 1 });
 
             var developerStats = new Dictionary<string, (int commits, int additions, int deletions, double score)>();
