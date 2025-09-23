@@ -43,7 +43,8 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
     builder.Services.AddSingleton<TelegramBotService>();
 
     // Start polling in background only when explicitly enabled
-    var enablePolling = (Environment.GetEnvironmentVariable("TELEGRAM_ENABLE_POLLING") ?? "false").Equals("true", StringComparison.OrdinalIgnoreCase);
+    // По умолчанию включаем polling, если переменная не задана
+    var enablePolling = (Environment.GetEnvironmentVariable("TELEGRAM_ENABLE_POLLING") ?? "true").Equals("true", StringComparison.OrdinalIgnoreCase);
     if (enablePolling)
     {
         Task.Run(async () =>
