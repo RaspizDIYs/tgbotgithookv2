@@ -5,6 +5,14 @@ using TelegramGitHubBot.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Render.com: привязка к PORT, если задан
+var renderPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(renderPort) && int.TryParse(renderPort, out var port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+    Console.WriteLine($"🌐 Render PORT detected: binding Kestrel to http://0.0.0.0:{port}");
+}
+
 // Add services to the container.
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

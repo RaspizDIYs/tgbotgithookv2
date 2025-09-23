@@ -4,7 +4,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using Telegram.Bot.Types.InputFiles;
+// using Telegram.Bot.Types.InputFiles; // deprecated in Telegram.Bot 19
 
 namespace TelegramGitHubBot.Services;
 
@@ -236,6 +236,11 @@ public class TelegramBotService
 
                 case "/achivelist":
                 case "/achievements":
+                case "/achivementlist":
+                case "/achievementlist":
+                case "/achievlist":
+                case "/achievement":
+                case "/achivement":
                     await HandleAchievementsCommandAsync(chatId);
                     break;
 
@@ -386,9 +391,9 @@ public class TelegramBotService
 📉 /trends - Тренды активности
 
 🏆 *Ачивки и рейтинги:*
-🏅 /achivelist - Список всех ачивок
-🥇 /leaderboard - Таблица лидеров
-🔥 /streaks - Топ стриков
+🏅 /achievements — список всех ачивок (алиасы: /achivelist, /achivementlist)
+🥇 /leaderboard — таблица лидеров
+🔥 /streaks — топ стриков
 
 ⚙️ *Настройки:*
 ⚙️ /settings - Настройки уведомлений
@@ -1553,7 +1558,7 @@ public class TelegramBotService
                 {
                     await _botClient.SendAnimationAsync(
                         chatId: chatId,
-                        animation: new InputFileUrl(achievement.GifUrl),
+                        animation: InputFile.FromUri(achievement.GifUrl),
                         caption: $"{achievement.Emoji} *{achievement.Name}*\n{achievement.Description}",
                         parseMode: ParseMode.Markdown,
                         disableNotification: true
