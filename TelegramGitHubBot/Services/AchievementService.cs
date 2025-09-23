@@ -204,6 +204,13 @@ public class AchievementService
         SaveUserStats();
     }
 
+    public void ResetAllData()
+    {
+        _userStats.Clear();
+        _achievements.Clear();
+        SaveUserStats();
+    }
+
     private long GetOrCreateUserId(string author, string email)
     {
         // Простая хеш-функция для создания ID из email

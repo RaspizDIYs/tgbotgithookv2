@@ -253,6 +253,9 @@ public class TelegramBotService
                 case "/streak":
                     await HandleStreaksCommandAsync(chatId);
                     break;
+                case "/recalc":
+                    await HandleRecalcCommandAsync(chatId);
+                    break;
 
                 case "/педик":
                     await _botClient.SendTextMessageAsync(chatId, "Сам ты педик", disableNotification: true);
@@ -394,6 +397,7 @@ public class TelegramBotService
 🏅 /achievements — список всех ачивок (алиасы: /achivelist, /achivementlist)
 🥇 /leaderboard — таблица лидеров (алиас: /top)
 🔥 /streaks — топ стриков (алиас: /streak)
+🔄 /recalc — ручной пересчёт ачивок
 
 ⚙️ *Настройки:*
 ⚙️ /settings - Настройки уведомлений
@@ -438,6 +442,7 @@ public class TelegramBotService
             new[]
             {
                 InlineKeyboardButton.WithCallbackData("🏠 Главное меню", "/start"),
+                InlineKeyboardButton.WithCallbackData("🔄 Пересчёт ачивок", "/recalc"),
             }
         });
 
@@ -1680,6 +1685,42 @@ public class TelegramBotService
         catch (Exception ex)
         {
             await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения стриков: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleRecalcCommandAsync(long chatId)
+    {
+        try
+        {
+            await _botClient.SendTextMessageAsync(chatId, "🔄 Запускаю пересчёт ачивок (может занять несколько минут)...", disableNotification: true);
+
+            // Сбрасываем все данные
+            _achievementService.ResetAllData();
+
+            // Получаем ветки; если пусто — пробуем основную ветку
+            var branches = await _gitHubService.GetBranchesListAsync();
+            if (!branches.Any())
+            {
+                var def = await _gitHubService.TryGetDefaultBranchAsync();
+                if (!string.IsNullOrEmpty(def)) branches = new List<string> { def };
+            }
+
+            var totalProcessed = 0;
+            foreach (var branch in branches)
+            {
+                var history = await _gitHubService.GetAllCommitsWithStatsForBranchAsync(branch, 2000);
+                foreach (var c in history)
+                {
+                    _achievementService.ProcessCommit(c.Author, c.Email, c.Message, c.Date, c.Additions, c.Deletions);
+                }
+                totalProcessed += history.Count;
+            }
+
+            await _botClient.SendTextMessageAsync(chatId, $"✅ Пересчёт завершён. Обработано коммитов: {totalProcessed}", disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка пересчёта: {ex.Message}", disableNotification: true);
         }
     }
 }

@@ -518,6 +518,20 @@ public class GitHubService
         }
     }
 
+    public async Task<string?> TryGetDefaultBranchAsync()
+    {
+        try
+        {
+            var repo = await _client.Repository.Get(Owner, Repo);
+            return repo.DefaultBranch;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting default branch: {ex.Message}");
+            return null;
+        }
+    }
+
     public async Task<string> SearchCommitsAsync(string query, int limit = 10)
     {
         try
