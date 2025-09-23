@@ -1657,10 +1657,7 @@ public class TelegramBotService
             }
 
             var message = "🔥 *Топ стриков*\n\n";
-            message += "7 дней подряд - 🔥\n";
-            message += "14 дней подряд - 🔥🔥\n";
-            message += "21 день подряд - 🔥🔥🔥\n";
-            message += "Месяц подряд - 🔥🔥🔥🔥\n\n";
+            message += "Подсказка: чем больше стрик, тем больше 🔥\n\n";
             
             for (int i = 0; i < topStreakUsers.Count; i++)
             {
@@ -1674,12 +1671,7 @@ public class TelegramBotService
                 };
                 
                 var streakEmoji = _achievementService.GetStreakEmoji(user.LongestStreak);
-                var currentStreakEmoji = _achievementService.GetStreakEmoji(user.CurrentStreak);
-                
-                message += $"{medal} *{user.DisplayName}*\n";
-                message += $"   {streakEmoji} Лучший стрик: {user.LongestStreak} дн.\n";
-                message += $"   {currentStreakEmoji} Текущий: {user.CurrentStreak} дн.\n";
-                message += $"   📊 Всего коммитов: {user.TotalCommits}\n\n";
+                message += $"{medal} *{user.DisplayName}* — {user.LongestStreak} дн. {streakEmoji}\n";
             }
 
             await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
