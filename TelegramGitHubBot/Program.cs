@@ -52,6 +52,16 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
             try
             {
                 Console.WriteLine("🔄 Starting Telegram bot polling...");
+                // На всякий случай снимаем вебхук, чтобы избежать 409/Conflict
+                try
+                {
+                    await botClient.DeleteWebhookAsync(true);
+                    Console.WriteLine("🧹 Telegram webhook deleted before polling start");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"⚠️ Failed to delete webhook: {ex.Message}");
+                }
                 // Create GitHub service for the polling task
                 var githubClient = new GitHubClient(new ProductHeaderValue("TelegramGitHubBot"));
                 var githubPat = Environment.GetEnvironmentVariable("GITHUB_PAT");
@@ -174,6 +184,11 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
                         {
                             Console.WriteLine("⏳ No new updates, waiting...");
                         }
+                    }
+                    catch (Telegram.Bot.Exceptions.ApiRequestException apiEx) when (apiEx.ErrorCode == 409)
+                    {
+                        Console.WriteLine($"❌ Polling conflict 409: {apiEx.Message}. Will retry in 10s");
+                        await Task.Delay(10_000);
                     }
                     catch (Exception ex)
                     {
