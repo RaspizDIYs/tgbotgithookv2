@@ -1,5 +1,6 @@
 using TelegramGitHubBot.Models;
 using System.Text.Json;
+using Octokit;
 
 namespace TelegramGitHubBot.Services;
 
@@ -8,14 +9,58 @@ public class AchievementService
     private readonly Dictionary<long, UserStats> _userStats = new();
     private readonly Dictionary<string, Achievement> _achievements = new();
     private readonly List<AchievementDefinition> _achievementDefinitions;
-    private readonly string _dataFilePath = "user_stats.json";
-    private readonly string _processedShasFilePath = "processed_shas.json";
+    private readonly string _dataDir;
+    private readonly string _dataFilePath;
+    private readonly string _processedShasFilePath;
+    private readonly string? _persistOwner;
+    private readonly string? _persistRepo;
+    private readonly string _persistPath = "tgbot_stats.json";
+    private readonly string _persistBranch = "main";
+    private GitHubClient? _ghClient;
     private readonly HashSet<string> _processedShas = new();
 
     public AchievementService()
     {
         _achievementDefinitions = InitializeAchievementDefinitions();
-        LoadUserStats();
+
+        // Определяем директорию хранения (персистентный диск)
+        _dataDir = Environment.GetEnvironmentVariable("DATA_DIR")?.Trim();
+        if (string.IsNullOrWhiteSpace(_dataDir))
+        {
+            _dataDir = Path.Combine(AppContext.BaseDirectory, "data");
+        }
+        try
+        {
+            Directory.CreateDirectory(_dataDir);
+        }
+        catch { }
+
+        _dataFilePath = Path.Combine(_dataDir, "user_stats.json");
+        _processedShasFilePath = Path.Combine(_dataDir, "processed_shas.json");
+
+        // Настройка GitHub персистенса (опционально)
+        var persistOwner = Environment.GetEnvironmentVariable("GITHUB_PERSIST_OWNER");
+        var persistRepo = Environment.GetEnvironmentVariable("GITHUB_PERSIST_REPO");
+        var persistPath = Environment.GetEnvironmentVariable("GITHUB_PERSIST_PATH");
+        var persistBranch = Environment.GetEnvironmentVariable("GITHUB_PERSIST_BRANCH");
+        var pat = Environment.GetEnvironmentVariable("GITHUB_PAT");
+        if (!string.IsNullOrWhiteSpace(persistOwner) && !string.IsNullOrWhiteSpace(persistRepo) && !string.IsNullOrWhiteSpace(pat))
+        {
+            _persistOwner = persistOwner!.Trim();
+            _persistRepo = persistRepo!.Trim();
+            if (!string.IsNullOrWhiteSpace(persistPath)) _persistPath = persistPath!.Trim();
+            if (!string.IsNullOrWhiteSpace(persistBranch)) _persistBranch = persistBranch!.Trim();
+            _ghClient = new GitHubClient(new ProductHeaderValue("TelegramGitHubBot"))
+            {
+                Credentials = new Credentials(pat.Trim())
+            };
+        }
+
+        // Пытаемся загрузить сперва из GitHub (если настроено), иначе — из локального файла
+        if (!(LoadUserStatsFromGitHub() || LoadUserStats()))
+        {
+            // ничего
+        }
         LoadProcessedShas();
     }
 
@@ -464,7 +509,7 @@ public class AchievementService
             .ToList();
     }
 
-    private void LoadUserStats()
+    private bool LoadUserStats()
     {
         try
         {
@@ -479,12 +524,14 @@ public class AchievementService
                         _userStats[kvp.Key] = kvp.Value;
                     }
                 }
+                return true;
             }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Ошибка загрузки статистики: {ex.Message}");
         }
+        return false;
     }
 
     private void SaveUserStats()
@@ -493,10 +540,79 @@ public class AchievementService
         {
             var json = JsonSerializer.Serialize(_userStats, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_dataFilePath, json);
+            SaveUserStatsToGitHub(json);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Ошибка сохранения статистики: {ex.Message}");
+        }
+    }
+
+    private bool LoadUserStatsFromGitHub()
+    {
+        try
+        {
+            if (_ghClient == null || string.IsNullOrWhiteSpace(_persistOwner) || string.IsNullOrWhiteSpace(_persistRepo)) return false;
+            var contents = _ghClient.Repository.Content.GetAllContentsByRef(_persistOwner!, _persistRepo!, _persistPath, _persistBranch).GetAwaiter().GetResult();
+            if (contents != null && contents.Count > 0)
+            {
+                var json = contents[0].Content;
+                if (!string.IsNullOrWhiteSpace(json))
+                {
+                    var data = JsonSerializer.Deserialize<Dictionary<long, UserStats>>(json);
+                    if (data != null)
+                    {
+                        _userStats.Clear();
+                        foreach (var kvp in data) _userStats[kvp.Key] = kvp.Value;
+                        // также сохраним локальную копию
+                        File.WriteAllText(_dataFilePath, json);
+                        Console.WriteLine("📥 Stats loaded from GitHub persist");
+                        return true;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"⚠️ Failed to load stats from GitHub: {ex.Message}");
+        }
+        return false;
+    }
+
+    private void SaveUserStatsToGitHub(string? jsonCache = null)
+    {
+        try
+        {
+            if (_ghClient == null || string.IsNullOrWhiteSpace(_persistOwner) || string.IsNullOrWhiteSpace(_persistRepo)) return;
+            var json = jsonCache ?? JsonSerializer.Serialize(_userStats, new JsonSerializerOptions { WriteIndented = true });
+            // Получаем SHA, чтобы определить Create/Update
+            string? sha = null;
+            try
+            {
+                var existing = _ghClient.Repository.Content.GetAllContentsByRef(_persistOwner!, _persistRepo!, _persistPath, _persistBranch).GetAwaiter().GetResult();
+                if (existing != null && existing.Count > 0)
+                {
+                    sha = existing[0].Sha;
+                }
+            }
+            catch { }
+
+            var commitMessage = "chore(stats): update user_stats.json";
+            if (string.IsNullOrEmpty(sha))
+            {
+                _ghClient.Repository.Content.CreateFile(_persistOwner!, _persistRepo!, _persistPath,
+                    new CreateFileRequest(commitMessage, json, _persistBranch)).GetAwaiter().GetResult();
+            }
+            else
+            {
+                _ghClient.Repository.Content.UpdateFile(_persistOwner!, _persistRepo!, _persistPath,
+                    new UpdateFileRequest(commitMessage, json, sha, _persistBranch)).GetAwaiter().GetResult();
+            }
+            Console.WriteLine("📤 Stats saved to GitHub persist");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"⚠️ Failed to save stats to GitHub: {ex.Message}");
         }
     }
 
