@@ -255,6 +255,33 @@ try
         Console.WriteLine("🧭 Startup scanner: initializing background scan task...");
         _ = Task.Run(async () =>
         {
+            // One-time full backfill on startup
+            try
+            {
+                Console.WriteLine("🧭 Backfill: fetching all branches and full history (one-time)...");
+                var branches = await ghService.GetBranchesListAsync();
+                foreach (var br in branches)
+                {
+                    try
+                    {
+                        var history = await ghService.GetAllCommitsWithStatsForBranchAsync(br, 1000);
+                        foreach (var c in history)
+                        {
+                            achService.ProcessCommit(c.Author, c.Email, c.Message, c.Date, c.Additions, c.Deletions);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Backfill branch {br} error: {ex.Message}");
+                    }
+                }
+                Console.WriteLine("✅ Backfill: completed");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Backfill error: {ex.Message}");
+            }
+
             while (true)
             {
                 try

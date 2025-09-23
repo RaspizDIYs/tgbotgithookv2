@@ -68,6 +68,62 @@ public class GitHubService
         return result;
     }
 
+    public async Task<List<GitCommitInfo>> GetAllCommitsWithStatsForBranchAsync(string branch, int maxCommits = 500)
+    {
+        var all = new List<GitCommitInfo>();
+        try
+        {
+            int page = 1;
+            const int pageSize = 100;
+            while (all.Count < maxCommits)
+            {
+                var commits = await _client.Repository.Commit.GetAll(Owner, Repo,
+                    new CommitRequest { Sha = branch },
+                    new ApiOptions { PageSize = pageSize, PageCount = 1, StartPage = page });
+
+                if (commits == null || commits.Count == 0) break;
+
+                foreach (var c in commits)
+                {
+                    if (all.Count >= maxCommits) break;
+
+                    var authorName = c.Commit.Author?.Name ?? c.Author?.Login ?? "Unknown";
+                    var authorEmail = c.Commit.Author?.Email ?? string.Empty;
+                    var date = c.Commit.Author?.Date.DateTime ?? DateTime.UtcNow;
+                    var message = c.Commit.Message ?? string.Empty;
+
+                    int additions = 0, deletions = 0;
+                    try
+                    {
+                        var detailed = await _client.Repository.Commit.Get(Owner, Repo, c.Sha);
+                        additions = detailed.Stats?.Additions ?? 0;
+                        deletions = detailed.Stats?.Deletions ?? 0;
+                    }
+                    catch { }
+
+                    all.Add(new GitCommitInfo
+                    {
+                        Sha = c.Sha,
+                        Author = authorName,
+                        Email = authorEmail,
+                        Date = date,
+                        Message = message,
+                        Additions = additions,
+                        Deletions = deletions
+                    });
+                }
+
+                if (commits.Count < pageSize) break;
+                page++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting full history for branch {branch}: {ex.Message}");
+        }
+        return all;
+    }
+
     public async Task<string> GetRepositoryStatusAsync()
     {
         try
