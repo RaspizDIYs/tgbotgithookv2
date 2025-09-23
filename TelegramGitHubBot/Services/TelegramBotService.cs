@@ -238,9 +238,6 @@ public class TelegramBotService
                 case "/achivementlist":
                 case "/achievementlist":
                 case "/achievlist":
-                    await HandleAchievementsCommandAsync(chatId);
-                    break;
-
                 case "/achievements":
                 case "/achievement":
                 case "/achivement":
@@ -397,7 +394,7 @@ public class TelegramBotService
 📉 /trends - Тренды активности
 
 🏆 *Ачивки и рейтинги:*
-🏅 /achievements — список всех ачивок (алиасы: /achivelist, /achivementlist)
+🏅 /achievements — просмотр ачивок (алиасы: /achivelist, /achivementlist)
 🥇 /leaderboard — таблица лидеров (алиас: /top)
 🔥 /streaks — топ стриков (алиас: /streak)
 🔄 /recalc — ручной пересчёт ачивок
@@ -1154,6 +1151,20 @@ public class TelegramBotService
         }
     }
 
+    private string NormalizeTenorUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return url;
+        var u = url.Trim();
+        // Replace known host variants to media.tenor.com
+        if (u.Contains("tenor.com") && !u.Contains("media.tenor.com"))
+        {
+            u = u.Replace("https://tenor.com/view/", "https://media.tenor.com/")
+                 .Replace("https://tenor.com/ru/view/", "https://media.tenor.com/");
+        }
+        // If page URL slipped through, leave it, fallback in sender will try mp4
+        return u;
+    }
+
     private void SetupDailySummaryTimer()
     {
         _dailySummaryTimer = new System.Timers.Timer();
@@ -1244,7 +1255,7 @@ public class TelegramBotService
                     {
                         await _botClient.SendAnimationAsync(
                             chatId: chatId,
-                            animation: InputFile.FromUri(weekendGif.Trim()),
+                            animation: InputFile.FromUri(NormalizeTenorUrl(weekendGif)),
                             caption: message,
                             parseMode: ParseMode.Markdown,
                             disableNotification: targetChatId.HasValue
@@ -1696,7 +1707,7 @@ public class TelegramBotService
                 {
                     await _botClient.SendAnimationAsync(
                         chatId: chatId,
-                        animation: InputFile.FromUri(achievement.GifUrl),
+                        animation: InputFile.FromUri(NormalizeTenorUrl(achievement.GifUrl)),
                         caption: $"{achievement.Emoji} *{achievement.Name}*\n{achievement.Description}",
                         parseMode: ParseMode.Markdown,
                         disableNotification: true
