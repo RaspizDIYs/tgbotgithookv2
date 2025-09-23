@@ -235,13 +235,16 @@ public class TelegramBotService
                     break;
 
                 case "/achivelist":
-                case "/achievements":
                 case "/achivementlist":
                 case "/achievementlist":
                 case "/achievlist":
+                    await HandleAchievementsCommandAsync(chatId);
+                    break;
+
+                case "/achievements":
                 case "/achievement":
                 case "/achivement":
-                    await HandleAchievementsCommandAsync(chatId);
+                    await ShowAchievementPageAsync(chatId, 0, null);
                     break;
 
                 case "/leaderboard":
@@ -635,6 +638,20 @@ public class TelegramBotService
                 Console.WriteLine("🔍 Processing search menu");
                 await ShowSearchMenuAsync(chatId, messageId);
             }
+            else if (data.StartsWith("achv:"))
+            {
+                Console.WriteLine("🏆 Processing achievement navigation");
+                var parts = data.Split(':');
+                if (parts.Length >= 3)
+                {
+                    var dir = parts[1];
+                    if (int.TryParse(parts[2], out var idx))
+                    {
+                        var delta = dir == "next" ? 1 : dir == "prev" ? -1 : 0;
+                        await ShowAchievementPageAsync(chatId, idx + delta, messageId);
+                    }
+                }
+            }
             else
             {
                 Console.WriteLine("📝 Processing regular command");
@@ -646,6 +663,74 @@ public class TelegramBotService
         {
             Console.WriteLine($"❌ Callback query error: {ex.Message}");
             await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Произошла ошибка");
+        }
+    }
+
+    private async Task ShowAchievementPageAsync(long chatId, int index, int? messageIdToEdit)
+    {
+        var list = _achievementService.GetAllAchievements().OrderBy(a => a.Name).ToList();
+        if (list.Count == 0)
+        {
+            await _botClient.SendTextMessageAsync(chatId, "🏆 Пока нет ачивок", disableNotification: true);
+            return;
+        }
+
+        var count = list.Count;
+        // нормализуем индекс
+        var idx = ((index % count) + count) % count;
+        var a = list[idx];
+
+        var status = a.IsUnlocked ? "✅" : "❌";
+        var holder = a.IsUnlocked && !string.IsNullOrEmpty(a.HolderName) ? $" (\u2014 {a.HolderName})" : "";
+        var value = a.Value.HasValue ? $" [{a.Value}]" : "";
+        var caption = $"{a.Emoji} *{a.Name}*\n{a.Description}{holder}{value}\n\n_{idx + 1}/{count}_";
+
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new []
+            {
+                InlineKeyboardButton.WithCallbackData("⬅️", $"achv:prev:{idx}"),
+                InlineKeyboardButton.WithCallbackData("➡️", $"achv:next:{idx}")
+            },
+            new [] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+        });
+
+        try
+        {
+            if (messageIdToEdit.HasValue && messageIdToEdit.Value != 0)
+            {
+                // Редактируем существующую анимацию/сообщение
+                var media = new Telegram.Bot.Types.InputFiles.InputMediaAnimation(InputFile.FromUri(a.GifUrl))
+                {
+                    Caption = caption,
+                    ParseMode = ParseMode.Markdown
+                };
+                await _botClient.EditMessageMediaAsync(chatId, messageIdToEdit.Value, media, keyboard);
+            }
+            else
+            {
+                await _botClient.SendAnimationAsync(
+                    chatId: chatId,
+                    animation: InputFile.FromUri(a.GifUrl),
+                    caption: caption,
+                    parseMode: ParseMode.Markdown,
+                    disableNotification: true,
+                    replyMarkup: keyboard
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Failed to show achievement page: {ex.Message}");
+            // Фоллбек: текст без гифки
+            if (messageIdToEdit.HasValue && messageIdToEdit.Value != 0)
+            {
+                await _botClient.EditMessageTextAsync(chatId, messageIdToEdit.Value, caption, ParseMode.Markdown, replyMarkup: keyboard);
+            }
+            else
+            {
+                await _botClient.SendTextMessageAsync(chatId, caption, ParseMode.Markdown, disableNotification: true, replyMarkup: keyboard);
+            }
         }
     }
 
