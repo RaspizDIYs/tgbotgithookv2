@@ -274,24 +274,33 @@ try
             // One-time full backfill on startup
             try
             {
-                Console.WriteLine("🧭 Backfill: fetching all branches and full history (one-time)...");
-                var branches = await ghService.GetBranchesListAsync();
-                foreach (var br in branches)
+                var flagPath = Path.Combine(AppContext.BaseDirectory, "backfill_state.json");
+                if (!File.Exists(flagPath))
                 {
-                    try
+                    Console.WriteLine("🧭 Backfill: fetching branches & limited history (one-time)...");
+                    var branches = await ghService.GetBranchesListAsync();
+                    foreach (var br in branches)
                     {
-                        var history = await ghService.GetAllCommitsWithStatsForBranchAsync(br, 1000);
-                        foreach (var c in history)
+                        try
                         {
-                            achService.ProcessCommit(c.Author, c.Email, c.Message, c.Date, c.Additions, c.Deletions);
+                            var history = await ghService.GetAllCommitsWithStatsForBranchAsync(br, 300, includeStats: true);
+                            foreach (var c in history)
+                            {
+                                achService.ProcessCommit(c.Author, c.Email, c.Message, c.Date, c.Additions, c.Deletions);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Backfill branch {br} error: {ex.Message}");
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Backfill branch {br} error: {ex.Message}");
-                    }
+                    File.WriteAllText(flagPath, "{\"completed\":true,\"ts\":\"" + DateTime.UtcNow.ToString("o") + "\"}");
+                    Console.WriteLine("✅ Backfill: completed");
                 }
-                Console.WriteLine("✅ Backfill: completed");
+                else
+                {
+                    Console.WriteLine("⏭️ Backfill skipped: flag exists");
+                }
             }
             catch (Exception ex)
             {
@@ -308,7 +317,7 @@ try
                     {
                         try
                         {
-                            var commits = await ghService.GetRecentCommitsWithStatsAsync(branch, 20);
+                            var commits = await ghService.GetRecentCommitsWithStatsAsync(branch, 20, includeStats: false);
                             foreach (var c in commits)
                             {
                                 achService.ProcessCommit(c.Author, c.Email, c.Message, c.Date, c.Additions, c.Deletions);
@@ -325,7 +334,7 @@ try
                 {
                     Console.WriteLine($"Startup scanner error: {ex.Message}");
                 }
-                await Task.Delay(TimeSpan.FromMinutes(5));
+                await Task.Delay(TimeSpan.FromMinutes(20));
             }
         });
     }

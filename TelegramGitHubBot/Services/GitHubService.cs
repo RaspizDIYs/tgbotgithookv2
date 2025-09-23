@@ -30,7 +30,7 @@ public class GitHubService
         public int Deletions { get; set; }
     }
 
-    public async Task<List<GitCommitInfo>> GetRecentCommitsWithStatsAsync(string branch, int count = 10)
+    public async Task<List<GitCommitInfo>> GetRecentCommitsWithStatsAsync(string branch, int count = 10, bool includeStats = true)
     {
         var result = new List<GitCommitInfo>();
         try
@@ -46,13 +46,17 @@ public class GitHubService
                 var message = c.Commit.Message ?? string.Empty;
 
                 int additions = 0, deletions = 0;
-                try
+                if (includeStats)
                 {
-                    var detailed = await _client.Repository.Commit.Get(_owner, _repo, c.Sha);
-                    additions = detailed.Stats?.Additions ?? 0;
-                    deletions = detailed.Stats?.Deletions ?? 0;
+                    try
+                    {
+                        var detailed = await _client.Repository.Commit.Get(_owner, _repo, c.Sha);
+                        additions = detailed.Stats?.Additions ?? 0;
+                        deletions = detailed.Stats?.Deletions ?? 0;
+                        await Task.Delay(150); // throttle
+                    }
+                    catch { }
                 }
-                catch { }
 
                 result.Add(new GitCommitInfo
                 {
@@ -74,7 +78,7 @@ public class GitHubService
         return result;
     }
 
-    public async Task<List<GitCommitInfo>> GetAllCommitsWithStatsForBranchAsync(string branch, int maxCommits = 500)
+    public async Task<List<GitCommitInfo>> GetAllCommitsWithStatsForBranchAsync(string branch, int maxCommits = 500, bool includeStats = true)
     {
         var all = new List<GitCommitInfo>();
         try
@@ -99,13 +103,17 @@ public class GitHubService
                     var message = c.Commit.Message ?? string.Empty;
 
                     int additions = 0, deletions = 0;
-                    try
+                    if (includeStats)
                     {
-                        var detailed = await _client.Repository.Commit.Get(_owner, _repo, c.Sha);
-                        additions = detailed.Stats?.Additions ?? 0;
-                        deletions = detailed.Stats?.Deletions ?? 0;
+                        try
+                        {
+                            var detailed = await _client.Repository.Commit.Get(_owner, _repo, c.Sha);
+                            additions = detailed.Stats?.Additions ?? 0;
+                            deletions = detailed.Stats?.Deletions ?? 0;
+                            await Task.Delay(150); // throttle
+                        }
+                        catch { }
                     }
-                    catch { }
 
                     all.Add(new GitCommitInfo
                     {
