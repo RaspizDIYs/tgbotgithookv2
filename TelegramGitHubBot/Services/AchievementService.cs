@@ -148,6 +148,17 @@ public class AchievementService
                 IsRecordBased = false,
                 RequiredValue = 3
             }
+            ,
+            new()
+            {
+                Id = "druid_branch_master",
+                Name = "Druid",
+                Description = "Друид - больше всех создал веток",
+                GifUrl = "https://tenor.com/ru/view/druid-of-the-talon-druid-storm-crow-flight-form-night-elf-gif-13611705726058255097",
+                Emoji = "🌿",
+                Type = AchievementType.BranchCreator,
+                IsRecordBased = true
+            }
         };
     }
 
@@ -178,6 +189,18 @@ public class AchievementService
         // Проверяем ачивки
         CheckAchievements(stats);
         
+        SaveUserStats();
+    }
+
+    public void RegisterBranchCreated(string author, string email, DateTime createdAt)
+    {
+        var userId = GetOrCreateUserId(author, email);
+        var stats = GetOrCreateUserStats(userId, author);
+
+        stats.BranchesCreated++;
+        stats.LastUpdated = DateTime.UtcNow;
+
+        CheckAchievements(stats);
         SaveUserStats();
     }
 
@@ -378,6 +401,7 @@ public class AchievementService
             AchievementType.RefactorKing => stats.RefactorCommits,
             AchievementType.TestChampion => stats.TestCommits,
             AchievementType.ReleaseGenius => stats.ReleaseCommits,
+            AchievementType.BranchCreator => stats.BranchesCreated,
             _ => 0
         };
     }

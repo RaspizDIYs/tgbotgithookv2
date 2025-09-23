@@ -100,6 +100,9 @@ public class WebhookHandlerService
                 case "push":
                     await HandlePushEventAsync(payload, chatId);
                     break;
+                case "create":
+                    await HandleCreateEventAsync(payload);
+                    break;
 
                 case "pull_request":
                     await HandlePullRequestEventAsync(payload, chatId);
@@ -125,6 +128,31 @@ public class WebhookHandlerService
         catch (Exception ex)
         {
             _logger.LogError(ex, $"Error processing {eventType} event");
+        }
+    }
+
+    private async Task HandleCreateEventAsync(JsonElement payload)
+    {
+        try
+        {
+            if (payload.TryGetProperty("ref_type", out var refType) && refType.GetString() == "branch")
+            {
+                var branchName = payload.GetProperty("ref").GetString() ?? "";
+                var sender = payload.GetProperty("sender").GetProperty("login").GetString() ?? "Unknown";
+                string senderEmail = string.Empty;
+                try
+                {
+                    senderEmail = payload.GetProperty("sender").GetProperty("email").GetString() ?? string.Empty;
+                }
+                catch { }
+
+                _logger.LogInformation($"🌿 Branch created: {branchName} by {sender}");
+                _achievementService.RegisterBranchCreated(sender, senderEmail, DateTime.UtcNow);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка обработки create event");
         }
     }
 

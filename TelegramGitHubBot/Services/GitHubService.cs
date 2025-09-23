@@ -13,6 +13,61 @@ public class GitHubService
         _client = client;
     }
 
+    public class GitCommitInfo
+    {
+        public string Sha { get; set; } = string.Empty;
+        public string Author { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public DateTime Date { get; set; }
+        public int Additions { get; set; }
+        public int Deletions { get; set; }
+    }
+
+    public async Task<List<GitCommitInfo>> GetRecentCommitsWithStatsAsync(string branch, int count = 10)
+    {
+        var result = new List<GitCommitInfo>();
+        try
+        {
+            var commits = await _client.Repository.Commit.GetAll(Owner, Repo,
+                new CommitRequest { Sha = branch }, new ApiOptions { PageSize = count, PageCount = 1 });
+
+            foreach (var c in commits.Take(count))
+            {
+                var authorName = c.Commit.Author?.Name ?? c.Author?.Login ?? "Unknown";
+                var authorEmail = c.Commit.Author?.Email ?? string.Empty;
+                var date = c.Commit.Author?.Date.DateTime ?? DateTime.UtcNow;
+                var message = c.Commit.Message ?? string.Empty;
+
+                int additions = 0, deletions = 0;
+                try
+                {
+                    var detailed = await _client.Repository.Commit.Get(Owner, Repo, c.Sha);
+                    additions = detailed.Stats?.Additions ?? 0;
+                    deletions = detailed.Stats?.Deletions ?? 0;
+                }
+                catch { }
+
+                result.Add(new GitCommitInfo
+                {
+                    Sha = c.Sha,
+                    Author = authorName,
+                    Email = authorEmail,
+                    Date = date,
+                    Message = message,
+                    Additions = additions,
+                    Deletions = deletions
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting commits for branch {branch}: {ex.Message}");
+        }
+
+        return result;
+    }
+
     public async Task<string> GetRepositoryStatusAsync()
     {
         try

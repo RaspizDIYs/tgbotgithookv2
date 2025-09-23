@@ -20,6 +20,7 @@ public class UserStats
     public int BugFixCommits { get; set; }
     public int FeatureCommits { get; set; }
     public int RefactorCommits { get; set; }
+    public int BranchesCreated { get; set; }
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 }
 
@@ -63,5 +64,6 @@ public enum AchievementType
     RefactorKing,
     StreakMaster,
     TestChampion,
-    ReleaseGenius
+    ReleaseGenius,
+    BranchCreator
 }

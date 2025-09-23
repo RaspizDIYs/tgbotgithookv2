@@ -44,7 +44,7 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
 
     // Start polling in background only when explicitly enabled
     var enablePolling = (Environment.GetEnvironmentVariable("TELEGRAM_ENABLE_POLLING") ?? "false").Equals("true", StringComparison.OrdinalIgnoreCase);
-    if (enablePolling && !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GITHUB_PAT")))
+    if (enablePolling)
     {
         Task.Run(async () =>
         {
@@ -72,6 +72,13 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
                                  Environment.GetEnvironmentVariable("ASPNETCORE_URLS")?.Split(';').FirstOrDefault() ??
                                  "http://localhost:5000";
 
+                    // Если URL содержит '+', подменим на localhost (валидный hostname внутри контейнера)
+                    if (baseUrl.Contains("+"))
+                    {
+                        baseUrl = baseUrl.Replace("http://+", "http://localhost");
+                        baseUrl = baseUrl.Replace("https://+", "https://localhost");
+                    }
+
                     while (true)
                     {
                         try
@@ -97,6 +104,41 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
                         await Task.Delay(30 * 1000); // Ping every 30 seconds
                     }
                 });
+
+                // Фоновый сканер коммитов по всем веткам каждые 5 минут
+                var scannerCts = new CancellationTokenSource();
+                var scannerTask = Task.Run(async () =>
+                {
+                    while (!scannerCts.IsCancellationRequested)
+                    {
+                        try
+                        {
+                            Console.WriteLine("🧭 Scanner: fetching branches...");
+                            var branches = await githubService.GetBranchesListAsync();
+                            foreach (var branch in branches)
+                            {
+                                try
+                                {
+                                    var commits = await githubService.GetRecentCommitsWithStatsAsync(branch, 20);
+                                    foreach (var c in commits)
+                                    {
+                                        achievementService.ProcessCommit(c.Author, c.Email, c.Message, c.Date, c.Additions, c.Deletions);
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"Scanner branch {branch} error: {ex.Message}");
+                                }
+                            }
+                            Console.WriteLine("✅ Scanner: pass completed");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Scanner error: {ex.Message}");
+                        }
+                        await Task.Delay(TimeSpan.FromMinutes(5), scannerCts.Token);
+                    }
+                }, scannerCts.Token);
 
                 while (true)
                 {
@@ -149,7 +191,7 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
     }
     else
     {
-        Console.WriteLine("⚠️  Polling disabled (set TELEGRAM_ENABLE_POLLING=true to enable) or GitHub PAT not configured");
+        Console.WriteLine("⚠️  Polling disabled (set TELEGRAM_ENABLE_POLLING=true to enable)");
     }
 }
 else
@@ -200,6 +242,55 @@ builder.Services.AddSingleton<AchievementService>();
 builder.Services.AddSingleton<WebhookHandlerService>();
 
 var app = builder.Build();
+
+// Запускаем фоновый сканер репозитория сразу при старте (независимо от polling/webhook)
+try
+{
+    var scopedProvider = app.Services;
+    var ghService = scopedProvider.GetService<GitHubService>();
+    var achService = scopedProvider.GetService<AchievementService>();
+
+    if (ghService != null && achService != null)
+    {
+        Console.WriteLine("🧭 Startup scanner: initializing background scan task...");
+        _ = Task.Run(async () =>
+        {
+            while (true)
+            {
+                try
+                {
+                    Console.WriteLine("🧭 Startup scanner pass: fetching branches...");
+                    var branches = await ghService.GetBranchesListAsync();
+                    foreach (var branch in branches)
+                    {
+                        try
+                        {
+                            var commits = await ghService.GetRecentCommitsWithStatsAsync(branch, 20);
+                            foreach (var c in commits)
+                            {
+                                achService.ProcessCommit(c.Author, c.Email, c.Message, c.Date, c.Additions, c.Deletions);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Startup scanner branch {branch} error: {ex.Message}");
+                        }
+                    }
+                    Console.WriteLine("✅ Startup scanner: pass completed");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Startup scanner error: {ex.Message}");
+                }
+                await Task.Delay(TimeSpan.FromMinutes(5));
+            }
+        });
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Failed to start startup scanner: {ex.Message}");
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
