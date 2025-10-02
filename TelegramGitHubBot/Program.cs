@@ -22,9 +22,13 @@ Console.WriteLine("=== Environment Variables Debug ===");
 var envVars = Environment.GetEnvironmentVariables();
 foreach (string key in envVars.Keys)
 {
-    if (key.Contains("TELEGRAM") || key.Contains("GITHUB") || key.Contains("ASPNETCORE"))
+    if (key.Contains("TELEGRAM") || key.Contains("GITHUB") || key.Contains("ASPNETCORE") || key.Contains("GEMINI"))
     {
-        Console.WriteLine($"{key} = {envVars[key]}");
+        var value = envVars[key]?.ToString() ?? "NULL";
+        var displayValue = key.Contains("API_KEY") ? 
+            $"{value.Substring(0, Math.Min(20, value.Length))}..." : 
+            value;
+        Console.WriteLine($"{key} = {displayValue}");
     }
 }
 Console.WriteLine("===================================");
@@ -41,6 +45,8 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
     var botClient = new TelegramBotClient(telegramToken.Trim());
     builder.Services.AddSingleton<ITelegramBotClient>(botClient);
     builder.Services.AddSingleton<TelegramBotService>();
+    builder.Services.AddHttpClient<GeminiManager>();
+    builder.Services.AddSingleton<GeminiManager>();
 
     // Start polling in background only when explicitly enabled
     // По умолчанию включаем polling, если переменная не задана

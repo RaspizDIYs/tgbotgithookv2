@@ -22,20 +22,26 @@ public class TelegramBotService
     private readonly ITelegramBotClient _botClient;
     private readonly GitHubService _gitHubService;
     private readonly AchievementService _achievementService;
+    private readonly GeminiManager _geminiManager;
     private readonly Dictionary<long, NotificationSettings> _chatSettings = new();
     private readonly HashSet<string> _processedCallbacks = new();
     private readonly HashSet<int> _processedUpdateIds = new();
     private readonly Queue<(int id, DateTime ts)> _processedUpdateTimestamps = new();
     private readonly Dictionary<string, System.Timers.Timer> _messageTimers = new();
     private System.Timers.Timer? _dailySummaryTimer;
+    private readonly Dictionary<long, int> _swearWordCounters = new();
+    private readonly HashSet<string> _swearWords = new();
+    private readonly Dictionary<long, bool> _geminiMode = new();
+    private readonly Dictionary<long, GameState> _gameStates = new();
 
-    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService)
+    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager)
     {
         _botClient = botClient;
         _gitHubService = gitHubService ?? throw new ArgumentNullException(nameof(gitHubService));
         _achievementService = achievementService ?? throw new ArgumentNullException(nameof(achievementService));
+        _geminiManager = geminiManager ?? throw new ArgumentNullException(nameof(geminiManager));
 
-        // Настраиваем ежедневную сводку в 18:00 МСК
+        InitializeSwearWords();
         SetupDailySummaryTimer();
     }
 
@@ -97,14 +103,120 @@ public class TelegramBotService
         var chatId = message.Chat.Id;
         var text = message.Text.Trim();
 
-        // Отвечаем только на команды, начинающиеся с "/"
+        // Проверяем матные слова во всех сообщениях
+        if (message.From != null)
+        {
+            await CheckSwearWordsAsync(chatId, message.From.Id, text);
+        }
+
+            
+            if (cleanCommand == "/glaistart")
+            {
+                _geminiMode[chatId] = true;
+                await _botClient.SendTextMessageAsync(chatId, "🤖 Режим Gemini активирован! Теперь я буду отвечать через AI модель.", disableNotification: true);
+                return;
+            }
+            else if (cleanCommand == "/glaistop")
+            {
+                _geminiMode[chatId] = false;
+                await _botClient.SendTextMessageAsync(chatId, "🛑 Режим Gemini деактивирован. Возвращаюсь к обычным командам.", disableNotification: true);
+                return;
+            }
+            else if (cleanCommand == "/glaistats")
+            {
+                var stats = _geminiManager.GetAllAgentsStatus();
+                await _botClient.SendTextMessageAsync(chatId, stats, parseMode: ParseMode.Markdown, disableNotification: true);
+                return;
+            }
+            else if (cleanCommand == "/glaicurrent")
+            {
+                var stats = _geminiManager.GetCurrentAgentStatus();
+                await _botClient.SendTextMessageAsync(chatId, stats, parseMode: ParseMode.Markdown, disableNotification: true);
+                return;
+            }
+            else if (cleanCommand == "/glaiswitch")
+            {
+                _geminiManager.SwitchToNextAgent();
+                var stats = _geminiManager.GetCurrentAgentStatus();
+                await _botClient.SendTextMessageAsync(chatId, $"🔄 **Переключение агента**\n\n{stats}", parseMode: ParseMode.Markdown, disableNotification: true);
+                return;
+            }
+            else if (cleanCommand == "/glaiclear")
+            {
+                _geminiManager.ClearContext(chatId);
+                await _botClient.SendTextMessageAsync(chatId, "🧹 **Контекст разговора очищен!**", disableNotification: true);
+                return;
+            }
+            else if (cleanCommand == "/game")
+            {
+                await ShowGameMenuAsync(chatId);
+                return;
+            }
+            else if (cleanCommand == "/gamememe")
+            {
+                await StartGameAsync(chatId, "meme");
+                return;
+            }
+            else if (cleanCommand == "/gamelol")
+            {
+                await StartGameAsync(chatId, "lol");
+                return;
+            }
+            else if (cleanCommand == "/gameprogramming")
+            {
+                await StartGameAsync(chatId, "programming");
+                return;
+            }
+            else if (cleanCommand == "/gamestop")
+            {
+                await StopGameAsync(chatId);
+                return;
+            }
+            else if (cleanCommand == "/gametest")
+            {
+                await TestGamePromptAsync(chatId);
+                return;
+            }
+        }
+
+        // Если активна игра, обрабатываем ответ игрока
+        if (_gameStates.ContainsKey(chatId) && _gameStates[chatId].IsActive)
+        {
+            await ProcessGameAnswerAsync(chatId, text);
+            return;
+        }
+
+        // Если режим Gemini активен, отправляем все сообщения в AI
+        if (_geminiMode.ContainsKey(chatId) && _geminiMode[chatId])
+        {
+            try
+            {
+                var aiResponse = await _geminiManager.GenerateResponseWithContextAsync(text, chatId);
+                
+                // Если ответ содержит информацию о лимитах, отправляем с Markdown
+                if (aiResponse.Contains("**Статус**") || aiResponse.Contains("**Лимиты исчерпаны**") || aiResponse.Contains("**Превышен лимит**"))
+                {
+                    await _botClient.SendTextMessageAsync(chatId, aiResponse, parseMode: ParseMode.Markdown, disableNotification: true);
+                }
+                else
+                {
+                    await _botClient.SendTextMessageAsync(chatId, aiResponse, disableNotification: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                var errorMessage = $"❌ **Ошибка AI:** {ex.Message}\n\n" + _geminiManager.GetCurrentAgentStatus();
+                await _botClient.SendTextMessageAsync(chatId, errorMessage, parseMode: ParseMode.Markdown, disableNotification: true);
+            }
+            return;
+        }
+
+        // Обычная обработка команд
         if (text.StartsWith("/"))
         {
-            // Обрабатываем команды с тегом бота (/command@BotName)
-            var cleanCommand = text.Split('@')[0]; // Убираем @BotName если есть
+            var cleanCommand = text.Split('@')[0];
             await HandleCommandAsync(chatId, cleanCommand, message.From?.Username);
         }
-        // Игнорируем все остальные сообщения (не отвечаем)
     }
 
     private NotificationSettings GetOrCreateSettings(long chatId)
@@ -1857,6 +1969,307 @@ public class TelegramBotService
         catch (Exception ex)
         {
             await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка пересчёта: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private void InitializeSwearWords()
+    {
+        // Хуй и производные
+        _swearWords.Add("хуй");
+        _swearWords.Add("хуйня");
+        _swearWords.Add("хуев");
+        _swearWords.Add("хуевый");
+        _swearWords.Add("хуярить");
+        _swearWords.Add("хуячить");
+        _swearWords.Add("хуяк");
+        
+        // Ебать и производные
+        _swearWords.Add("ебать");
+        _swearWords.Add("ебаться");
+        _swearWords.Add("ебаное");
+        _swearWords.Add("ебанутый");
+        _swearWords.Add("ебашить");
+        _swearWords.Add("ебанько");
+        _swearWords.Add("ебучий");
+        _swearWords.Add("ебанулся");
+        _swearWords.Add("ебанушка");
+        _swearWords.Add("ебанат");
+        _swearWords.Add("ебало");
+        _swearWords.Add("ебатель");
+        
+        // Блядь и производные
+        _swearWords.Add("блядь");
+        _swearWords.Add("блядский");
+        _swearWords.Add("блядство");
+        _swearWords.Add("блядовать");
+        _swearWords.Add("блядюга");
+        _swearWords.Add("блядня");
+        _swearWords.Add("блядюшка");
+        
+        // Сука и производные
+        _swearWords.Add("сука");
+        _swearWords.Add("сукин");
+        _swearWords.Add("сучий");
+        _swearWords.Add("сучара");
+        _swearWords.Add("сучатина");
+        _swearWords.Add("сучиться");
+        _swearWords.Add("сук");
+        
+        // Уебищ и производные
+        _swearWords.Add("уебищ");
+        _swearWords.Add("уебок");
+        _swearWords.Add("уебан");
+        _swearWords.Add("уебать");
+        _swearWords.Add("уебаться");
+        _swearWords.Add("уебище");
+        _swearWords.Add("уебашить");
+        
+        // Ахуй и производные
+        _swearWords.Add("ахуй");
+        _swearWords.Add("ахуеть");
+        _swearWords.Add("ахуенный");
+        _swearWords.Add("ахуевший");
+        _swearWords.Add("ахуевать");
+        _swearWords.Add("ахуевший");
+        _swearWords.Add("ахуительный");
+        
+        // Пизда и расширенные производные
+        _swearWords.Add("пизда");
+        _swearWords.Add("пиздец");
+        _swearWords.Add("пиздатый");
+        _swearWords.Add("пиздецкий");
+        _swearWords.Add("пиздить");
+        _swearWords.Add("пиздобол");
+        _swearWords.Add("пиздюк");
+        _swearWords.Add("пиздануть");
+        _swearWords.Add("пизданутый");
+        _swearWords.Add("припизднутый");
+        _swearWords.Add("припиздячить");
+        _swearWords.Add("пиздабол");
+        _swearWords.Add("пиздюлина");
+        _swearWords.Add("пиздюль");
+        
+        // Похуй и производные
+        _swearWords.Add("похуй");
+        _swearWords.Add("похуям");
+        _swearWords.Add("поахуевали");
+        _swearWords.Add("похуист");
+        _swearWords.Add("похуистика");
+        _swearWords.Add("похуйщина");
+        _swearWords.Add("похуйствовать");
+        
+        // Хуйлан и производные
+        _swearWords.Add("хуйлан");
+        _swearWords.Add("хуила");
+        _swearWords.Add("хуйлуша");
+        _swearWords.Add("хуйло");
+        _swearWords.Add("хуйня");
+        _swearWords.Add("хуйман");
+        _swearWords.Add("хуйма");
+        
+        // Блядота и производные
+        _swearWords.Add("блядота");
+        _swearWords.Add("блядина");
+        _swearWords.Add("блядюк");
+        _swearWords.Add("блядюшка");
+        _swearWords.Add("блядство");
+        _swearWords.Add("блядовать");
+    }
+
+    private async Task CheckSwearWordsAsync(long chatId, long userId, string text)
+    {
+        var lowerText = text.ToLower();
+        var swearCount = 0;
+
+        foreach (var swearWord in _swearWords)
+        {
+            if (lowerText.Contains(swearWord))
+            {
+                swearCount++;
+            }
+        }
+
+        if (swearCount > 0)
+        {
+            if (!_swearWordCounters.ContainsKey(userId))
+            {
+                _swearWordCounters[userId] = 0;
+            }
+
+            _swearWordCounters[userId] += swearCount;
+
+            if (_swearWordCounters[userId] >= 100)
+            {
+                var shameMessage = "Позор! Позор! Позор! Уже 100 оскорблений в чате от тебя!";
+                var gifUrl = "https://media1.tenor.com/m/5t7dwIkeSioAAAAC/shame-bell.gif";
+                
+                await _botClient.SendAnimationAsync(chatId, gifUrl, caption: shameMessage);
+                _swearWordCounters[userId] = 0;
+            }
+        }
+    }
+
+    private async Task ShowGameMenuAsync(long chatId)
+    {
+        var menu = "🎮 **Доступные игры:**\n\n" +
+                  "1️⃣ `/gamememe` - Что? Где? Мем? (русскоязычные мемы)\n" +
+                  "2️⃣ `/gamelol` - Что? Где? Лол? (League of Legends)\n" +
+                  "3️⃣ `/gameprogramming` - If? Else? True? (программирование)\n\n" +
+                  "🛑 `/gamestop` - остановить текущую игру\n\n" +
+                  "Выберите игру для начала!";
+        
+        await _botClient.SendTextMessageAsync(chatId, menu, parseMode: ParseMode.Markdown, disableNotification: true);
+    }
+
+    private async Task StartGameAsync(long chatId, string gameType)
+    {
+        // Останавливаем текущую игру если есть
+        if (_gameStates.ContainsKey(chatId) && _gameStates[chatId].IsActive)
+        {
+            await StopGameAsync(chatId);
+        }
+
+        // Создаем новое состояние игры
+        _gameStates[chatId] = new GameState
+        {
+            IsActive = true,
+            GameType = gameType,
+            CurrentQuestion = 0,
+            CorrectAnswers = 0,
+            WrongAnswers = 0,
+            HasUsedLifeline = false,
+            StartTime = DateTime.UtcNow
+        };
+
+        var gameName = GamePrompts.GameNames[gameType];
+        var prompt = GamePrompts.Prompts[gameType];
+
+        try
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"🎮 **{gameName}**\n\nИгра начинается! AI придумывает вопросы...", disableNotification: true);
+            
+            var aiResponse = await _geminiManager.GenerateResponseWithContextAsync(prompt, chatId);
+            await _botClient.SendTextMessageAsync(chatId, aiResponse, disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ **Ошибка запуска игры:** {ex.Message}", disableNotification: true);
+            _gameStates[chatId].IsActive = false;
+        }
+    }
+
+    private async Task StopGameAsync(long chatId)
+    {
+        if (_gameStates.ContainsKey(chatId) && _gameStates[chatId].IsActive)
+        {
+            var gameState = _gameStates[chatId];
+            var gameName = GamePrompts.GameNames[gameState.GameType];
+            
+            await _botClient.SendTextMessageAsync(chatId, $"🛑 **{gameName} остановлена!**\n\nСтатистика:\n✅ Правильных: {gameState.CorrectAnswers}\n❌ Неправильных: {gameState.WrongAnswers}", disableNotification: true);
+            
+            _gameStates[chatId].IsActive = false;
+        }
+        else
+        {
+            await _botClient.SendTextMessageAsync(chatId, "❌ **Нет активной игры для остановки!**", disableNotification: true);
+        }
+    }
+
+    private async Task ProcessGameAnswerAsync(long chatId, string answer)
+    {
+        if (!_gameStates.ContainsKey(chatId) || !_gameStates[chatId].IsActive)
+            return;
+
+        var gameState = _gameStates[chatId];
+        var gameName = GamePrompts.GameNames[gameState.GameType];
+
+        try
+        {
+            // Нормализуем ответ игрока
+            var normalizedAnswer = NormalizeAnswer(answer);
+            
+            // Отправляем ответ игрока в AI для обработки
+            var prompt = $@"Player answered: '{normalizedAnswer}'
+
+IMPORTANT: Respond ONLY in Russian language!
+
+Process the answer:
+1. If correct - congratulate and give next question
+2. If wrong - say correct answer and give next question  
+3. If this was the last (10th) question - finish game with congratulations
+4. Follow format: Вопрос: [text] A) [option] B) [option] C) [option] D) [option] Правильный ответ: [letter] - [text]
+
+Remember: ALL responses must be in Russian!";
+            
+            var aiResponse = await _geminiManager.GenerateResponseWithContextAsync(prompt, chatId);
+            await _botClient.SendTextMessageAsync(chatId, aiResponse, disableNotification: true);
+
+            // Проверяем, завершилась ли игра
+            if (aiResponse.Contains("поздравляю") || aiResponse.Contains("статистика") || aiResponse.Contains("игра завершена"))
+            {
+                _gameStates[chatId].IsActive = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ **Ошибка обработки ответа:** {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private string NormalizeAnswer(string answer)
+    {
+        // Нормализуем ответ игрока для лучшего распознавания
+        var normalized = answer.Trim().ToUpper();
+        
+        // Если ответ содержит только букву
+        if (normalized.Length == 1 && "ABCD".Contains(normalized))
+        {
+            return normalized;
+        }
+        
+        // Если ответ начинается с буквы
+        if (normalized.Length > 1 && "ABCD".Contains(normalized[0]))
+        {
+            return normalized[0].ToString();
+        }
+        
+        // Возвращаем оригинальный ответ
+        return answer.Trim();
+    }
+
+    private async Task TestGamePromptAsync(long chatId)
+    {
+        try
+        {
+            await _botClient.SendTextMessageAsync(chatId, "🧪 **Тестирование промпта игры...**", disableNotification: true);
+            
+            var testPrompt = @"You are the host of a ""What? Where? When?"" quiz game about Russian internet memes.
+
+IMPORTANT: All questions, answers, and responses must be in RUSSIAN language only!
+
+RULES:
+- 10 questions with 4 answer options each
+- Difficulty progression: 3 easy → 3 medium → 3 hard → 1 very hard
+- Player has 1 lifeline (can make 1 mistake)
+- Only real popular Russian memes, no fictional ones
+
+RESPONSE FORMAT (MUST be in Russian):
+Вопрос: [question text]
+A) [option 1]
+B) [option 2] 
+C) [option 3]
+D) [option 4]
+
+Правильный ответ: [letter] - [answer text]
+
+Start with the first easy question. Remember: everything must be in Russian!";
+
+            var aiResponse = await _geminiManager.GenerateResponseWithContextAsync(testPrompt, chatId);
+            await _botClient.SendTextMessageAsync(chatId, aiResponse, disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ **Ошибка тестирования:** {ex.Message}", disableNotification: true);
         }
     }
 }
