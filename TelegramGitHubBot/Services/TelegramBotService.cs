@@ -2390,7 +2390,7 @@ public class TelegramBotService
                 var shameMessage = "Позор! Позор! Позор! Уже 100 оскорблений в чате от тебя!";
                 var gifUrl = "https://media1.tenor.com/m/5t7dwIkeSioAAAAC/shame-bell.gif";
                 
-                await _botClient.SendAnimationAsync(chatId, gifUrl, caption: shameMessage);
+                await _botClient.SendAnimationAsync(chatId, InputFile.FromUri(gifUrl), caption: shameMessage);
                 _swearWordCounters[userId] = 0;
             }
         }

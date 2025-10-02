@@ -61,6 +61,7 @@ public class GeminiManager
             return "❌ **Ошибка:** Не настроено ни одного AI агента!";
         }
 
+        GeminiAgent selectedAgent;
         lock (_lockObject)
         {
             // Ищем доступного агента, начиная с текущего
@@ -83,10 +84,10 @@ public class GeminiManager
             }
 
             // Если все агенты недоступны, используем текущего (покажет ошибку лимитов)
-            var selectedAgent = _agents[_currentAgentIndex];
-            
-            return await selectedAgent.GenerateResponseAsync(prompt);
+            selectedAgent = _agents[_currentAgentIndex];
         }
+        
+        return await selectedAgent.GenerateResponseAsync(prompt);
     }
 
     public string GetAllAgentsStatus()
@@ -162,6 +163,7 @@ public class GeminiManager
         // Добавляем сообщение пользователя в контекст
         AddMessageToContext(chatId, "user", prompt);
 
+        GeminiAgent selectedAgent;
         lock (_lockObject)
         {
             // Ищем доступного агента, начиная с текущего
@@ -184,12 +186,13 @@ public class GeminiManager
             }
 
             // Если все агенты недоступны, используем текущего (покажет ошибку лимитов)
-            var selectedAgent = _agents[_currentAgentIndex];
-            
-            // Формируем контекст для отправки
-            var contextPrompt = BuildContextPrompt(chatId);
-            
-            var response = await selectedAgent.GenerateResponseAsync(contextPrompt);
+            selectedAgent = _agents[_currentAgentIndex];
+        }
+        
+        // Формируем контекст для отправки
+        var contextPrompt = BuildContextPrompt(chatId);
+        
+        var response = await selectedAgent.GenerateResponseAsync(contextPrompt);
             
             // Добавляем ответ ассистента в контекст
             if (!response.Contains("❌") && !response.Contains("⚠️"))
@@ -249,3 +252,4 @@ public class GeminiManager
         }
     }
 }
+
