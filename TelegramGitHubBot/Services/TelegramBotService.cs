@@ -719,6 +719,12 @@ public class TelegramBotService
                 Console.WriteLine($"📂 Processing submenu: {data}");
                 await HandleSubmenuAsync(chatId, messageId, data);
             }
+            else if (data.StartsWith("copy_deeplink:"))
+            {
+                Console.WriteLine("📋 Processing deeplink copy request");
+                var deeplink = data.Substring("copy_deeplink:".Length);
+                await HandleDeeplinkCopyAsync(chatId, deeplink);
+            }
             else
             {
                 Console.WriteLine("📝 Processing regular command");
@@ -2471,13 +2477,13 @@ help - полный список команд";
             }
             message += $"📦 Репозиторий: goodluckv2\n";
             message += $"\n🔗 Ссылка:\n`{deeplink}`\n\n";
-            message += "Нажми кнопку ниже, чтобы открыть в Cursor";
+            message += "Нажми кнопку ниже, чтобы скопировать ссылку";
 
             var keyboard = new InlineKeyboardMarkup(new[]
             {
                 new[]
                 {
-                    InlineKeyboardButton.WithUrl("🖱️ Открыть в Cursor", deeplink)
+                    InlineKeyboardButton.WithCallbackData("📋 Скопировать ссылку", $"copy_deeplink:{deeplink}")
                 },
                 new[]
                 {
@@ -2499,6 +2505,44 @@ help - полный список команд";
         catch (Exception ex)
         {
             await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка генерации диплинка: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleDeeplinkCopyAsync(long chatId, string deeplink)
+    {
+        try
+        {
+            var message = "📋 *Ссылка скопирована в буфер обмена*\n\n";
+            message += $"🔗 Диплинк для Cursor:\n`{deeplink}`\n\n";
+            message += "💡 *Как использовать:*\n";
+            message += "1. Скопируйте ссылку выше\n";
+            message += "2. Откройте Cursor\n";
+            message += "3. Вставьте ссылку в адресную строку браузера\n";
+            message += "4. Cursor автоматически откроет файл\n\n";
+            message += "⚠️ *Важно:* Убедитесь, что Cursor установлен и настроен для работы с протоколом `cursor://`";
+
+            var keyboard = new InlineKeyboardMarkup(new[]
+            {
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData("🏠 Главное меню", "/start")
+                }
+            });
+
+            await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: message,
+                parseMode: ParseMode.Markdown,
+                disableWebPagePreview: true,
+                disableNotification: true,
+                replyMarkup: keyboard
+            );
+
+            Console.WriteLine($"📋 Deeplink copy requested: {deeplink}");
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка обработки запроса: {ex.Message}", disableNotification: true);
         }
     }
     
