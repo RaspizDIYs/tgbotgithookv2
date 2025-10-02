@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Мост диплинков Cursor</title>
+  <link rel="icon" type="image/svg+xml" href="./image/cursor.svg?v=1" />
+  <link rel="icon" type="image/png" href="./image/cursor-font.png?v=1" />
+  <style>
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: #0f172a; }
+    .container { height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; }
+    .card { max-width: 720px; width: 100%; background: #ffffff; border: 1px solid #e6e6e6; border-radius: 12px; padding: 24px; box-shadow: 0 6px 24px rgba(0,0,0,0.20); }
+    .header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .logo { width: 40px; height: 40px; object-fit: contain; }
+    h1 { margin: 0; font-size: 20px; color: #0f172a; }
+    p { margin: 8px 0; color: #374151; }
+    code { background: #f6f8fa; padding: 2px 6px; border-radius: 6px; word-break: break-all; }
+    .hint { color: #6b7280; font-size: 14px; }
+    .error { color: #b00020; }
+    .success { color: #0a7d35; }
+    .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .btn { appearance: none; border: 1px solid #e5e7eb; background: #111827; color: #ffffff; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+    .btn:active { transform: translateY(1px); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <img class="logo" src="./image/cursor-font.png" alt="Cursor" />
+        <h1>Открываем в Cursor…</h1>
+      </div>
+      <p id="status" class="hint">Перенаправляем…</p>
+      <p class="hint">Если ничего не происходит, убедитесь, что Cursor установлен и диплинки включены.</p>
+      <div class="row">
+        <p class="hint" style="margin: 0;">Можно скопировать диплинк и вставить его вручную:</p>
+        <button id="copyBtn" class="btn">Копировать</button>
+      </div>
+      <p><code id="deeplink">(генерация…)</code></p>
+    </div>
+  </div>
+  <script>
+    (function() {
+      function getParam(name) {
+        const url = new URL(window.location.href);
+        return url.searchParams.get(name);
+      }
+
+      function buildCursorLink() {
+        const type = getParam('type');
+        if (type === 'prompt') {
+          const text = getParam('text') || '';
+          // text is expected URL-encoded already; ensure safe encode
+          const encoded = encodeURIComponent(text);
+          return `cursor://anysphere.cursor-deeplink/prompt?text=${encoded}`;
+        }
+
+        if (type === 'file') {
+          const workspace = (getParam('workspace') || '').replace(/\\/g, '/');
+          const path = (getParam('path') || '').replace(/^\/+/, '');
+          const line = getParam('line');
+          const column = getParam('column');
+          let url = `cursor://file/${workspace}/${path}`;
+          const qs = [];
+          if (line) qs.push(`line=${encodeURIComponent(line)}`);
+          if (column) qs.push(`column=${encodeURIComponent(column)}`);
+          if (qs.length) url += `?${qs.join('&')}`;
+          return url;
+        }
+
+        throw new Error('Unknown deeplink type');
+      }
+
+      try {
+        const link = buildCursorLink();
+        const deeplinkEl = document.getElementById('deeplink');
+        const statusEl = document.getElementById('status');
+        const copyBtn = document.getElementById('copyBtn');
+
+        deeplinkEl.textContent = link;
+        statusEl.textContent = 'Перенаправляем…';
+
+        // Copy logic
+        copyBtn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(link);
+            const oldText = copyBtn.textContent;
+            copyBtn.textContent = 'Скопировано';
+            setTimeout(() => { copyBtn.textContent = oldText; }, 1500);
+          } catch (err) {
+            console.error('Copy failed', err);
+          }
+        });
+
+        // Attempt redirect
+        window.location.href = link;
+        // Fallback: second attempt shortly after
+        setTimeout(() => {
+          window.location.href = link;
+        }, 400);
+      } catch (e) {
+        document.getElementById('status').textContent = 'Failed to generate deeplink';
+        document.getElementById('status').classList.add('error');
+        console.error(e);
+      }
+    })();
+  </script>
+</body>
+</html>
+
+

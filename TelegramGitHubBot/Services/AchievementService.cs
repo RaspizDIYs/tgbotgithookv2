@@ -4,6 +4,26 @@ using Octokit;
 
 namespace TelegramGitHubBot.Services;
 
+// Класс для запланированной статистики
+public class ScheduledStats
+{
+    public string Data { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime LastUpdated { get; set; }
+    public string Type { get; set; } = string.Empty; // "commits", "authors", "weekly", "rating", etc.
+    public string Parameters { get; set; } = string.Empty; // Дополнительные параметры (ветка, количество и т.д.)
+}
+
+// Класс для кэшированной статистики
+public class CachedStats
+{
+    public string Data { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime LastAccessed { get; set; }
+    public int AccessCount { get; set; }
+    public string Type { get; set; } = string.Empty; // "authors", "commits", "status", etc.
+}
+
 public class AchievementService
 {
     private readonly Dictionary<long, UserStats> _userStats = new();
@@ -11,6 +31,7 @@ public class AchievementService
     private readonly List<AchievementDefinition> _achievementDefinitions;
     private readonly string _dataDir;
     private readonly string _dataFilePath;
+    private readonly string _achievementsFilePath;
     private readonly string _processedShasFilePath;
     private readonly string? _persistOwner;
     private readonly string? _persistRepo;
@@ -18,13 +39,37 @@ public class AchievementService
     private readonly string _persistBranch = "main";
     private GitHubClient? _ghClient;
     private readonly HashSet<string> _processedShas = new();
+    
+    // Настройки кэша
+    private readonly int _maxProcessedShas = 10000; // Максимум SHA в кэше
+    private readonly int _maxInactiveUsers = 50; // Максимум неактивных пользователей
+    private readonly int _inactiveDaysThreshold = 90; // Дней неактивности
+    
+    // Расписание автообновления (9:00, 18:00, 00:00 МСК)
+    private readonly int[] _updateHours = { 9, 18, 0 };
+    private DateTime _lastScheduledUpdate = DateTime.MinValue;
+    private readonly Dictionary<string, ScheduledStats> _scheduledStatsCache = new();
+    
+    // Защита от потери данных
+    private readonly Dictionary<string, ScheduledStats> _backupStatsCache = new();
+    private readonly int _minApiCallsThreshold = 100; // Минимум API вызовов для безопасного обновления
+    private readonly int _maxApiCallsPerUpdate = 50; // Максимум API вызовов за одно обновление
+    private DateTime _lastApiResetCheck = DateTime.MinValue;
+    private readonly object _lockObject = new object(); // Блокировка для конкурентного доступа
+    
+    // Кэш статистики
+    private readonly Dictionary<string, CachedStats> _statsCache = new();
+    private readonly int _maxCachedStats = 100;
+    private readonly int _statsCacheDays = 7;
+    private DateTime _lastAutoRefresh = DateTime.MinValue;
+    private readonly int _autoRefreshIntervalHours = 24;
 
     public AchievementService()
     {
         _achievementDefinitions = InitializeAchievementDefinitions();
 
         // Определяем директорию хранения (персистентный диск)
-        _dataDir = Environment.GetEnvironmentVariable("DATA_DIR")?.Trim();
+        _dataDir = Environment.GetEnvironmentVariable("DATA_DIR")?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(_dataDir))
         {
             _dataDir = Path.Combine(AppContext.BaseDirectory, "data");
@@ -36,6 +81,7 @@ public class AchievementService
         catch { }
 
         _dataFilePath = Path.Combine(_dataDir, "user_stats.json");
+        _achievementsFilePath = Path.Combine(_dataDir, "achievements.json");
         _processedShasFilePath = Path.Combine(_dataDir, "processed_shas.json");
 
         // Настройка GitHub персистенса (опционально)
@@ -61,7 +107,9 @@ public class AchievementService
         {
             // ничего
         }
+        LoadAchievements();
         LoadProcessedShas();
+        LoadScheduledStatsFromFile();
     }
 
     private List<AchievementDefinition> InitializeAchievementDefinitions()
@@ -212,6 +260,24 @@ public class AchievementService
 
     public void ProcessCommit(string author, string email, string commitMessage, DateTime commitDate, int linesAdded, int linesDeleted)
     {
+        ProcessCommitInternal(author, email, commitMessage, commitDate, linesAdded, linesDeleted);
+        SaveUserStats();
+        SaveAchievements();
+    }
+
+    public void ProcessCommitBatch(string author, string email, string commitMessage, DateTime commitDate, int linesAdded, int linesDeleted)
+    {
+        ProcessCommitInternal(author, email, commitMessage, commitDate, linesAdded, linesDeleted);
+    }
+
+    public void SaveAll()
+    {
+        SaveUserStats();
+        SaveAchievements();
+    }
+
+    private void ProcessCommitInternal(string author, string email, string commitMessage, DateTime commitDate, int linesAdded, int linesDeleted)
+    {
         var userId = GetOrCreateUserId(author, email);
         var stats = GetOrCreateUserStats(userId, author);
         
@@ -236,8 +302,6 @@ public class AchievementService
         
         // Проверяем ачивки
         CheckAchievements(stats);
-        
-        SaveUserStats();
     }
 
     public void RegisterBranchCreated(string author, string email, DateTime createdAt)
@@ -250,6 +314,7 @@ public class AchievementService
 
         CheckAchievements(stats);
         SaveUserStats();
+        SaveAchievements();
     }
 
     public void ResetAllData()
@@ -258,6 +323,7 @@ public class AchievementService
         _achievements.Clear();
         _processedShas.Clear();
         SaveUserStats();
+        SaveAchievements();
         SaveProcessedShas();
     }
 
@@ -578,6 +644,9 @@ public class AchievementService
     {
         try
         {
+            // Очищаем неактивных пользователей перед сохранением
+            CleanupInactiveUsers();
+            
             var json = JsonSerializer.Serialize(_userStats, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_dataFilePath, json);
             SaveUserStatsToGitHub(json);
@@ -585,6 +654,44 @@ public class AchievementService
         catch (Exception ex)
         {
             Console.WriteLine($"Ошибка сохранения статистики: {ex.Message}");
+        }
+    }
+
+    private void SaveAchievements()
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(_achievements, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(_achievementsFilePath, json);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка сохранения достижений: {ex.Message}");
+        }
+    }
+
+    private void LoadAchievements()
+    {
+        try
+        {
+            if (File.Exists(_achievementsFilePath))
+            {
+                var json = File.ReadAllText(_achievementsFilePath);
+                var data = JsonSerializer.Deserialize<Dictionary<string, Achievement>>(json);
+                if (data != null)
+                {
+                    _achievements.Clear();
+                    foreach (var kvp in data)
+                    {
+                        _achievements[kvp.Key] = kvp.Value;
+                    }
+                    Console.WriteLine($"✅ Загружено {_achievements.Count} достижений");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка загрузки достижений: {ex.Message}");
         }
     }
 
@@ -680,6 +787,9 @@ public class AchievementService
     {
         try
         {
+            // Очищаем старые SHA если их слишком много
+            CleanupProcessedShas();
+            
             var json = JsonSerializer.Serialize(_processedShas, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_processedShasFilePath, json);
         }
@@ -687,5 +797,520 @@ public class AchievementService
         {
             Console.WriteLine($"Ошибка сохранения обработанных коммитов: {ex.Message}");
         }
+    }
+
+    private void CleanupProcessedShas()
+    {
+        if (_processedShas.Count <= _maxProcessedShas) return;
+        
+        // Оставляем только последние SHA (новые коммиты важнее старых)
+        var shasToKeep = _processedShas.TakeLast(_maxProcessedShas).ToHashSet();
+        var removedCount = _processedShas.Count - shasToKeep.Count;
+        
+        _processedShas.Clear();
+        foreach (var sha in shasToKeep)
+        {
+            _processedShas.Add(sha);
+        }
+        
+        Console.WriteLine($"🧹 Очищено {removedCount} старых SHA из кэша (осталось {_processedShas.Count})");
+    }
+
+    private void CleanupInactiveUsers()
+    {
+        var cutoffDate = DateTime.UtcNow.AddDays(-_inactiveDaysThreshold);
+        var inactiveUsers = _userStats.Values
+            .Where(u => u.LastCommitDate == null || u.LastCommitDate < cutoffDate)
+            .OrderBy(u => u.LastCommitDate ?? DateTime.MinValue)
+            .ToList();
+
+        if (inactiveUsers.Count <= _maxInactiveUsers) return;
+
+        var usersToRemove = inactiveUsers.Take(inactiveUsers.Count - _maxInactiveUsers).ToList();
+        
+        foreach (var user in usersToRemove)
+        {
+            _userStats.Remove(user.TelegramUserId);
+        }
+        
+        Console.WriteLine($"🧹 Удалено {usersToRemove.Count} неактивных пользователей (неактивны > {_inactiveDaysThreshold} дней)");
+    }
+
+    public (int userStatsCount, int achievementsCount, int processedShasCount, long totalSizeBytes) GetCacheInfo()
+    {
+        var userStatsSize = File.Exists(_dataFilePath) ? new FileInfo(_dataFilePath).Length : 0;
+        var achievementsSize = File.Exists(_achievementsFilePath) ? new FileInfo(_achievementsFilePath).Length : 0;
+        var processedShasSize = File.Exists(_processedShasFilePath) ? new FileInfo(_processedShasFilePath).Length : 0;
+        
+        return (_userStats.Count, _achievements.Count, _processedShas.Count, userStatsSize + achievementsSize + processedShasSize);
+    }
+
+    public void ForceCleanup()
+    {
+        CleanupProcessedShas();
+        CleanupInactiveUsers();
+        SaveAll();
+    }
+    
+    // Автоматическое управление кэшем статистики
+    public void CacheStats(string key, string data, string type)
+    {
+        _statsCache[key] = new CachedStats
+        {
+            Data = data,
+            CreatedAt = DateTime.UtcNow,
+            LastAccessed = DateTime.UtcNow,
+            AccessCount = 1,
+            Type = type
+        };
+        
+        // Автоматическая очистка при превышении лимита
+        if (_statsCache.Count > _maxCachedStats)
+        {
+            CleanupStatsCache();
+        }
+    }
+    
+    public string? GetCachedStats(string key)
+    {
+        if (_statsCache.TryGetValue(key, out var cached))
+        {
+            cached.LastAccessed = DateTime.UtcNow;
+            cached.AccessCount++;
+            return cached.Data;
+        }
+        return null;
+    }
+    
+    public bool ShouldAutoRefresh()
+    {
+        return DateTime.UtcNow - _lastAutoRefresh > TimeSpan.FromHours(_autoRefreshIntervalHours);
+    }
+    
+    public void MarkAutoRefresh()
+    {
+        _lastAutoRefresh = DateTime.UtcNow;
+    }
+    
+    private void CleanupStatsCache()
+    {
+        var cutoffDate = DateTime.UtcNow.AddDays(-_statsCacheDays);
+        var toRemove = _statsCache
+            .Where(kvp => kvp.Value.CreatedAt < cutoffDate)
+            .OrderBy(kvp => kvp.Value.LastAccessed)
+            .Take(_statsCache.Count - _maxCachedStats + 10) // Удаляем на 10 больше для буфера
+            .Select(kvp => kvp.Key)
+            .ToList();
+            
+        foreach (var key in toRemove)
+        {
+            _statsCache.Remove(key);
+        }
+        
+        Console.WriteLine($"🧹 Очищено {toRemove.Count} устаревших записей из кэша статистики");
+    }
+    
+    // Умное сохранение данных - сохраняет важное, очищает старое
+    public void SmartSave()
+    {
+        // Сохраняем пользователей с активностью за последние 30 дней
+        var activeUsers = _userStats.Values
+            .Where(u => u.LastCommitDate > DateTime.UtcNow.AddDays(-30))
+            .ToList();
+            
+        // Сохраняем ачивки активных пользователей
+        var activeAchievements = _achievements.Values
+            .Where(a => activeUsers.Any(u => u.TelegramUserId == a.HolderUserId))
+            .ToList();
+            
+        // Сохраняем последние обработанные SHA (важно для избежания дублирования)
+        var recentShas = _processedShas.Take(_maxProcessedShas).ToList();
+        
+        // Временно сохраняем только активные данные
+        var tempUserStats = _userStats.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        var tempAchievements = _achievements.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        var tempProcessedShas = _processedShas.ToHashSet();
+        
+        // Очищаем основные коллекции
+        _userStats.Clear();
+        _achievements.Clear();
+        _processedShas.Clear();
+        
+        // Восстанавливаем только активные данные
+        foreach (var user in activeUsers)
+        {
+            _userStats[user.TelegramUserId] = user;
+        }
+        
+        foreach (var achievement in activeAchievements)
+        {
+            _achievements[achievement.Id] = achievement;
+        }
+        
+        foreach (var sha in recentShas)
+        {
+            _processedShas.Add(sha);
+        }
+        
+        // Сохраняем очищенные данные
+        SaveUserStats();
+        SaveAchievements();
+        SaveProcessedShas();
+        
+        Console.WriteLine($"💾 Умное сохранение: {activeUsers.Count} активных пользователей, {activeAchievements.Count} ачивок, {recentShas.Count} SHA");
+    }
+    
+    // Получение информации о кэше статистики
+    public (int statsCount, int totalSize, Dictionary<string, int> byType) GetStatsCacheInfo()
+    {
+        var totalSize = _statsCache.Values.Sum(s => s.Data.Length);
+        var byType = _statsCache.Values
+            .GroupBy(s => s.Type)
+            .ToDictionary(g => g.Key, g => g.Count());
+            
+        return (_statsCache.Count, totalSize, byType);
+    }
+    
+    // Запланированное обновление статистики
+    public bool ShouldUpdateScheduledStats()
+    {
+        var mskTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+        var nowMsk = TimeZoneInfo.ConvertTime(DateTime.UtcNow, mskTimeZone);
+        
+        // Проверяем, прошло ли достаточно времени с последнего обновления
+        if (_lastScheduledUpdate != DateTime.MinValue && 
+            nowMsk - _lastScheduledUpdate < TimeSpan.FromHours(6))
+        {
+            return false;
+        }
+        
+        // Проверяем, наступило ли время для обновления (точное время)
+        var currentHour = nowMsk.Hour;
+        var currentMinute = nowMsk.Minute;
+        
+        // Обновляем только в начале часа (0-5 минут)
+        if (currentMinute > 5)
+        {
+            return false;
+        }
+        
+        return _updateHours.Contains(currentHour);
+    }
+    
+    public void MarkScheduledUpdate()
+    {
+        var mskTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+        _lastScheduledUpdate = TimeZoneInfo.ConvertTime(DateTime.UtcNow, mskTimeZone);
+    }
+    
+    public void SaveScheduledStats(string key, string data, string type, string parameters = "")
+    {
+        lock (_lockObject)
+        {
+            _scheduledStatsCache[key] = new ScheduledStats
+            {
+                Data = data,
+                CreatedAt = DateTime.UtcNow,
+                LastUpdated = DateTime.UtcNow,
+                Type = type,
+                Parameters = parameters
+            };
+            
+            // Сохраняем в JSON файл
+            SaveScheduledStatsToFile();
+        }
+    }
+    
+    public string? GetScheduledStats(string key)
+    {
+        lock (_lockObject)
+        {
+            return _scheduledStatsCache.TryGetValue(key, out var stats) ? stats.Data : null;
+        }
+    }
+    
+    public void ClearOldScheduledStats()
+    {
+        var cutoffDate = DateTime.UtcNow.AddDays(-3); // Храним 3 дня
+        var toRemove = _scheduledStatsCache
+            .Where(kvp => kvp.Value.CreatedAt < cutoffDate)
+            .Select(kvp => kvp.Key)
+            .ToList();
+            
+        foreach (var key in toRemove)
+        {
+            _scheduledStatsCache.Remove(key);
+        }
+        
+        if (toRemove.Count > 0)
+        {
+            Console.WriteLine($"🧹 Очищено {toRemove.Count} устаревших записей запланированной статистики");
+            SaveScheduledStatsToFile();
+        }
+    }
+    
+    private void SaveScheduledStatsToFile()
+    {
+        try
+        {
+            var filePath = Path.Combine(_dataDir, "scheduled_stats.json");
+            var json = JsonSerializer.Serialize(_scheduledStatsCache, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(filePath, json);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Ошибка сохранения запланированной статистики: {ex.Message}");
+        }
+    }
+    
+    private void LoadScheduledStatsFromFile()
+    {
+        try
+        {
+            var filePath = Path.Combine(_dataDir, "scheduled_stats.json");
+            if (File.Exists(filePath))
+            {
+                var json = File.ReadAllText(filePath);
+                var loaded = JsonSerializer.Deserialize<Dictionary<string, ScheduledStats>>(json);
+                if (loaded != null)
+                {
+                    _scheduledStatsCache.Clear();
+                    foreach (var kvp in loaded)
+                    {
+                        _scheduledStatsCache[kvp.Key] = kvp.Value;
+                    }
+                    Console.WriteLine($"📊 Загружено {_scheduledStatsCache.Count} записей запланированной статистики");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Ошибка загрузки запланированной статистики: {ex.Message}");
+        }
+    }
+    
+    // Защита от потери данных
+    public void CreateBackup()
+    {
+        lock (_lockObject)
+        {
+            _backupStatsCache.Clear();
+            foreach (var kvp in _scheduledStatsCache)
+            {
+                _backupStatsCache[kvp.Key] = new ScheduledStats
+                {
+                    Data = kvp.Value.Data,
+                    CreatedAt = kvp.Value.CreatedAt,
+                    LastUpdated = kvp.Value.LastUpdated,
+                    Type = kvp.Value.Type,
+                    Parameters = kvp.Value.Parameters
+                };
+            }
+            Console.WriteLine($"💾 Создана резервная копия: {_backupStatsCache.Count} записей");
+        }
+    }
+    
+    public void RestoreFromBackup()
+    {
+        if (_backupStatsCache.Count == 0)
+        {
+            Console.WriteLine("⚠️ Резервная копия пуста, восстановление невозможно");
+            return;
+        }
+        
+        _scheduledStatsCache.Clear();
+        foreach (var kvp in _backupStatsCache)
+        {
+            _scheduledStatsCache[kvp.Key] = new ScheduledStats
+            {
+                Data = kvp.Value.Data,
+                CreatedAt = kvp.Value.CreatedAt,
+                LastUpdated = kvp.Value.LastUpdated,
+                Type = kvp.Value.Type,
+                Parameters = kvp.Value.Parameters
+            };
+        }
+        
+        SaveScheduledStatsToFile();
+        Console.WriteLine($"🔄 Восстановлено из резервной копии: {_scheduledStatsCache.Count} записей");
+    }
+    
+    public bool IsBackupValid()
+    {
+        return _backupStatsCache.Count > 0 && 
+               _backupStatsCache.Values.Any(v => !string.IsNullOrEmpty(v.Data));
+    }
+    
+    public void ClearBackup()
+    {
+        var count = _backupStatsCache.Count;
+        _backupStatsCache.Clear();
+        Console.WriteLine($"🗑️ Очищена резервная копия: {count} записей");
+    }
+    
+    // Безопасное сохранение с проверкой
+    public bool SafeSaveScheduledStats(string key, string data, string type, string parameters = "")
+    {
+        try
+        {
+            // Проверяем, что данные не пустые
+            if (string.IsNullOrWhiteSpace(data))
+            {
+                Console.WriteLine($"⚠️ Попытка сохранить пустые данные для {key}");
+                return false;
+            }
+            
+            lock (_lockObject)
+            {
+                // Сохраняем новые данные
+                _scheduledStatsCache[key] = new ScheduledStats
+                {
+                    Data = data,
+                    CreatedAt = DateTime.UtcNow,
+                    LastUpdated = DateTime.UtcNow,
+                    Type = type,
+                    Parameters = parameters
+                };
+                
+                // Сохраняем в файл
+                SaveScheduledStatsToFile();
+            }
+            
+            Console.WriteLine($"✅ Безопасно сохранено: {key} ({type})");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Ошибка безопасного сохранения {key}: {ex.Message}");
+            return false;
+        }
+    }
+    
+    // Проверка целостности данных
+    public bool ValidateDataIntegrity()
+    {
+        try
+        {
+            var validCount = 0;
+            var totalCount = _scheduledStatsCache.Count;
+            
+            foreach (var kvp in _scheduledStatsCache)
+            {
+                if (!string.IsNullOrWhiteSpace(kvp.Value.Data) && 
+                    !string.IsNullOrWhiteSpace(kvp.Value.Type))
+                {
+                    validCount++;
+                }
+            }
+            
+            var isValid = validCount == totalCount && totalCount > 0;
+            Console.WriteLine($"🔍 Проверка целостности: {validCount}/{totalCount} записей валидны");
+            
+            return isValid;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Ошибка проверки целостности: {ex.Message}");
+            return false;
+        }
+    }
+    
+    public int GetMinApiCallsThreshold()
+    {
+        return _minApiCallsThreshold;
+    }
+    
+    public int GetMaxApiCallsPerUpdate()
+    {
+        return _maxApiCallsPerUpdate;
+    }
+    
+    public (int count, long sizeBytes, Dictionary<string, int> byType) GetScheduledStatsInfo()
+    {
+        var totalSize = _scheduledStatsCache.Values.Sum(s => s.Data.Length);
+        var byType = _scheduledStatsCache.Values
+            .GroupBy(s => s.Type)
+            .ToDictionary(g => g.Key, g => g.Count());
+            
+        return (_scheduledStatsCache.Count, totalSize, byType);
+    }
+    
+    public string GetAchievementStats()
+    {
+        var unlockedCount = _achievements.Values.Count(a => a.IsUnlocked);
+        var totalCount = _achievementDefinitions.Count;
+        var recentUnlocks = _achievements.Values
+            .Where(a => a.IsUnlocked && a.UnlockedAt > DateTime.UtcNow.AddDays(-7))
+            .Count();
+            
+        return $"🏆 Достижения: {unlockedCount}/{totalCount} разблокировано\n" +
+               $"📈 За неделю: {recentUnlocks} новых";
+    }
+    
+    public string GetStreaks()
+    {
+        var currentStreaks = _userStats.Values
+            .Where(u => u.CurrentStreak > 0)
+            .OrderByDescending(u => u.CurrentStreak)
+            .Take(5)
+            .ToList();
+            
+        if (!currentStreaks.Any())
+            return "🔥 Нет активных стриков";
+            
+        var result = "🔥 Текущие стрики:\n";
+        foreach (var user in currentStreaks)
+        {
+            result += $"• {user.DisplayName}: {user.CurrentStreak} дней\n";
+        }
+        
+        return result.TrimEnd();
+    }
+    
+    public string GetRating()
+    {
+        var topUsers = _userStats.Values
+            .OrderByDescending(u => u.TotalCommits)
+            .Take(5)
+            .ToList();
+            
+        if (!topUsers.Any())
+            return "📊 Нет данных для рейтинга";
+            
+        var result = "📊 Топ разработчиков:\n";
+        for (int i = 0; i < topUsers.Count; i++)
+        {
+            var user = topUsers[i];
+            result += $"{i + 1}. {user.DisplayName}: {user.TotalCommits} коммитов\n";
+        }
+        
+        return result.TrimEnd();
+    }
+    
+    public string GetLeaderboard()
+    {
+        var leaderboard = _userStats.Values
+            .OrderByDescending(u => u.TotalCommits)
+            .Take(10)
+            .ToList();
+            
+        if (!leaderboard.Any())
+            return "🏆 Нет данных для таблицы лидеров";
+            
+        var result = "🏆 Таблица лидеров:\n";
+        for (int i = 0; i < leaderboard.Count; i++)
+        {
+            var user = leaderboard[i];
+            var medal = i switch
+            {
+                0 => "🥇",
+                1 => "🥈", 
+                2 => "🥉",
+                _ => $"{i + 1}."
+            };
+            result += $"{medal} {user.DisplayName}: {user.TotalCommits} коммитов\n";
+        }
+        
+        return result.TrimEnd();
     }
 }

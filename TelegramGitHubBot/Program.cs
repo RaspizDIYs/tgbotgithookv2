@@ -53,7 +53,7 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
     var enablePolling = (Environment.GetEnvironmentVariable("TELEGRAM_ENABLE_POLLING") ?? "true").Equals("true", StringComparison.OrdinalIgnoreCase);
     if (enablePolling)
     {
-        Task.Run(async () =>
+        _ = Task.Run(async () =>
         {
             try
             {
@@ -77,7 +77,8 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
                 }
                 var githubService = new GitHubService(githubClient);
                 var achievementService = new AchievementService();
-                var telegramService = new TelegramBotService(botClient, githubService, achievementService);
+                var messageStatsService = new MessageStatsService();
+                var telegramService = new TelegramBotService(botClient, githubService, achievementService, messageStatsService);
 
                 int? lastUpdateId = null;
 
@@ -235,6 +236,7 @@ Console.WriteLine($"   GITHUB_PAT: '{githubToken?.Substring(0, Math.Min(25, gith
            githubClient.Credentials = new Credentials(githubToken.Trim());
            builder.Services.AddSingleton<GitHubClient>(githubClient);
            builder.Services.AddSingleton<GitHubService>();
+           builder.Services.AddSingleton<MessageStatsService>();
            builder.Services.AddSingleton<TelegramBotService>();
        }
 else
@@ -261,6 +263,7 @@ else
 
 // Register services
 builder.Services.AddSingleton<AchievementService>();
+builder.Services.AddSingleton<MessageStatsService>();
 builder.Services.AddSingleton<WebhookHandlerService>();
 
 var app = builder.Build();

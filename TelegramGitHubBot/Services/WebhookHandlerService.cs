@@ -131,7 +131,7 @@ public class WebhookHandlerService
         }
     }
 
-    private async Task HandleCreateEventAsync(JsonElement payload)
+    private Task HandleCreateEventAsync(JsonElement payload)
     {
         try
         {
@@ -154,6 +154,7 @@ public class WebhookHandlerService
         {
             _logger.LogError(ex, "Ошибка обработки create event");
         }
+        return Task.CompletedTask;
     }
 
     private async Task HandlePushEventAsync(JsonElement payload, long chatId)
@@ -250,7 +251,7 @@ public class WebhookHandlerService
         // _logger.LogInformation($"✅ Push message sent successfully to chat {chatId}, MessageId: {pushMessage?.MessageId}");
     }
 
-    private async Task HandlePullRequestEventAsync(JsonElement payload, long chatId)
+    private Task HandlePullRequestEventAsync(JsonElement payload, long chatId)
     {
         var action = payload.GetProperty("action").GetString();
         var pr = payload.GetProperty("pull_request");
@@ -286,9 +287,10 @@ public class WebhookHandlerService
             _logger.LogInformation($"🔕 PR notification disabled for chat {chatId}: {message.Replace('\n', ' ')}");
             // await SendTelegramMessageAsync(chatId, message, "pull_request");
         }
+        return Task.CompletedTask;
     }
 
-    private async Task HandleIssueEventAsync(JsonElement payload, long chatId)
+    private Task HandleIssueEventAsync(JsonElement payload, long chatId)
     {
         var action = payload.GetProperty("action").GetString();
         var issue = payload.GetProperty("issue");
@@ -320,12 +322,13 @@ public class WebhookHandlerService
             _logger.LogInformation($"🔕 Issue notification disabled for chat {chatId}: {message.Replace('\n', ' ')}");
             // await SendTelegramMessageAsync(chatId, message, "issues");
         }
+        return Task.CompletedTask;
     }
 
-    private async Task HandleReleaseEventAsync(JsonElement payload, long chatId)
+    private Task HandleReleaseEventAsync(JsonElement payload, long chatId)
     {
         var action = payload.GetProperty("action").GetString();
-        if (action != "published") return;
+        if (action != "published") return Task.CompletedTask;
 
         var release = payload.GetProperty("release");
         var tag = release.GetProperty("tag_name").GetString();
@@ -340,12 +343,13 @@ public class WebhookHandlerService
 
         _logger.LogInformation($"🔕 Release notification disabled for chat {chatId}: {message.Replace('\n', ' ')}");
         // await SendTelegramMessageAsync(chatId, message, "release");
+        return Task.CompletedTask;
     }
 
-    private async Task HandleWorkflowRunEventAsync(JsonElement payload, long chatId)
+    private Task HandleWorkflowRunEventAsync(JsonElement payload, long chatId)
     {
         var action = payload.GetProperty("action").GetString();
-        if (action != "completed") return;
+        if (action != "completed") return Task.CompletedTask;
 
         var workflowRun = payload.GetProperty("workflow_run");
         var name = workflowRun.GetProperty("name").GetString();
@@ -368,6 +372,7 @@ public class WebhookHandlerService
 
         _logger.LogInformation($"🔕 Workflow notification disabled for chat {chatId}: {message.Replace('\n', ' ')}");
         // await SendTelegramMessageAsync(chatId, message, "workflow");
+        return Task.CompletedTask;
     }
 
     private async Task<Telegram.Bot.Types.Message?> SendTelegramMessageAsync(long chatId, string message, string notificationType, InlineKeyboardMarkup? keyboard = null)
