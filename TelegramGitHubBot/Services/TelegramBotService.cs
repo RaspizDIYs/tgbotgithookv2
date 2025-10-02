@@ -728,13 +728,13 @@ public class TelegramBotService
             else
             {
                 Console.WriteLine("📝 Processing regular command");
-                // Проверяем, нужно ли удалить предыдущее сообщение
+                // Обрабатываем обычную команду из callback data
+                await HandleCommandAsync(chatId, data, callbackQuery.From?.Username);
+                // Проверяем, нужно ли удалить предыдущее сообщение ПОСЛЕ отправки нового
                 if (ShouldDeletePreviousMessage(data))
                 {
                     await DeleteMessageAsync(chatId, messageId);
                 }
-                // Обрабатываем обычную команду из callback data
-                await HandleCommandAsync(chatId, data, callbackQuery.From?.Username);
             }
         }
         catch (Exception ex)
@@ -2219,9 +2219,6 @@ public class TelegramBotService
     {
         try
         {
-            // Удаляем предыдущее сообщение при переходе в подменю
-            await DeleteMessageAsync(chatId, messageId);
-            
             var menuType = menuData.Split(':')[1];
 
             switch (menuType)
@@ -2236,6 +2233,9 @@ public class TelegramBotService
                     await ShowCursorMenuAsync(chatId, messageId);
                     break;
             }
+            
+            // Удаляем предыдущее сообщение ПОСЛЕ отправки нового
+            await DeleteMessageAsync(chatId, messageId);
         }
         catch (Exception ex)
         {
