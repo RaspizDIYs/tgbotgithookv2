@@ -77,33 +77,59 @@ public class GeminiManager
             return "❌ **Ошибка:** Не настроено ни одного AI агента!";
         }
 
-        GeminiAgent selectedAgent;
-        lock (_lockObject)
+        // Пробуем всех агентов по очереди
+        var attempts = 0;
+        var startIndex = _currentAgentIndex;
+        Exception lastException = null;
+
+        while (attempts < _agents.Count)
         {
-            // Ищем доступного агента, начиная с текущего
-            var startIndex = _currentAgentIndex;
-            var attempts = 0;
-
-            while (attempts < _agents.Count)
+            GeminiAgent currentAgent;
+            lock (_lockObject)
             {
-                var agent = _agents[_currentAgentIndex];
-                
-                if (agent.IsAvailable)
-                {
-                    // Найден доступный агент, используем его
-                    break;
-                }
-
-                // Переключаемся на следующего агента
-                _currentAgentIndex = (_currentAgentIndex + 1) % _agents.Count;
-                attempts++;
+                currentAgent = _agents[_currentAgentIndex];
             }
 
-            // Если все агенты недоступны, используем текущего (покажет ошибку лимитов)
-            selectedAgent = _agents[_currentAgentIndex];
+            try
+            {
+                Console.WriteLine($"🔄 Попытка {attempts + 1}/{_agents.Count}: {currentAgent.Name}");
+                var response = await currentAgent.GenerateResponseAsync(prompt);
+                
+                // Если ответ успешный, возвращаем его
+                if (!response.Contains("❌") && !response.Contains("⚠️"))
+                {
+                    Console.WriteLine($"✅ Успешно получен ответ от {currentAgent.Name}");
+                    return response;
+                }
+                
+                // Если ответ содержит ошибку, пробуем следующего агента
+                Console.WriteLine($"⚠️ {currentAgent.Name} вернул ошибку, пробуем следующего агента");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Ошибка от {currentAgent.Name}: {ex.Message}");
+                lastException = ex;
+            }
+
+            // Переключаемся на следующего агента
+            lock (_lockObject)
+            {
+                _currentAgentIndex = (_currentAgentIndex + 1) % _agents.Count;
+            }
+            attempts++;
         }
+
+        // Если все агенты не сработали, возвращаем ошибку
+        var errorMessage = $"❌ **Все AI агенты недоступны!**\n\n";
+        errorMessage += $"🔄 Попробовано агентов: {attempts}\n";
+        errorMessage += $"📊 Доступно агентов: {_agents.Count(a => a.IsAvailable)}/{_agents.Count}\n";
         
-        return await selectedAgent.GenerateResponseAsync(prompt);
+        if (lastException != null)
+        {
+            errorMessage += $"🔍 Последняя ошибка: {lastException.Message}";
+        }
+
+        return errorMessage;
     }
 
     public string GetAllAgentsStatus()
@@ -144,6 +170,7 @@ public class GeminiManager
         lock (_lockObject)
         {
             _currentAgentIndex = (_currentAgentIndex + 1) % _agents.Count;
+            Console.WriteLine($"🔄 Переключение на агента: {_agents[_currentAgentIndex].Name}");
         }
     }
 
@@ -154,6 +181,24 @@ public class GeminiManager
             if (agentIndex >= 0 && agentIndex < _agents.Count)
             {
                 _currentAgentIndex = agentIndex;
+                Console.WriteLine($"🔄 Переключение на агента: {_agents[_currentAgentIndex].Name}");
+            }
+        }
+    }
+
+    public void SwitchToWorkingAgent()
+    {
+        lock (_lockObject)
+        {
+            var workingAgent = _agents.FirstOrDefault(a => a.IsAvailable);
+            if (workingAgent != null)
+            {
+                _currentAgentIndex = _agents.IndexOf(workingAgent);
+                Console.WriteLine($"🔄 Переключение на рабочий агент: {workingAgent.Name}");
+            }
+            else
+            {
+                Console.WriteLine("⚠️ Нет доступных агентов для переключения");
             }
         }
     }
@@ -179,44 +224,62 @@ public class GeminiManager
         // Добавляем сообщение пользователя в контекст
         AddMessageToContext(chatId, "user", prompt);
 
-        GeminiAgent selectedAgent;
-        lock (_lockObject)
+        // Пробуем всех агентов по очереди
+        var attempts = 0;
+        Exception lastException = null;
+
+        while (attempts < _agents.Count)
         {
-            // Ищем доступного агента, начиная с текущего
-            var startIndex = _currentAgentIndex;
-            var attempts = 0;
-
-            while (attempts < _agents.Count)
+            GeminiAgent currentAgent;
+            lock (_lockObject)
             {
-                var agent = _agents[_currentAgentIndex];
-                
-                if (agent.IsAvailable)
-                {
-                    // Найден доступный агент, используем его
-                    break;
-                }
-
-                // Переключаемся на следующий агент
-                _currentAgentIndex = (_currentAgentIndex + 1) % _agents.Count;
-                attempts++;
+                currentAgent = _agents[_currentAgentIndex];
             }
 
-            // Если все агенты недоступны, используем текущего (покажет ошибку лимитов)
-            selectedAgent = _agents[_currentAgentIndex];
+            try
+            {
+                Console.WriteLine($"🔄 Попытка {attempts + 1}/{_agents.Count}: {currentAgent.Name} (с контекстом)");
+                
+                // Формируем контекст для отправки
+                var contextPrompt = BuildContextPrompt(chatId);
+                var response = await currentAgent.GenerateResponseAsync(contextPrompt);
+                
+                // Если ответ успешный, добавляем в контекст и возвращаем
+                if (!response.Contains("❌") && !response.Contains("⚠️"))
+                {
+                    Console.WriteLine($"✅ Успешно получен ответ от {currentAgent.Name}");
+                    AddMessageToContext(chatId, "assistant", response);
+                    return response;
+                }
+                
+                // Если ответ содержит ошибку, пробуем следующего агента
+                Console.WriteLine($"⚠️ {currentAgent.Name} вернул ошибку, пробуем следующего агента");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Ошибка от {currentAgent.Name}: {ex.Message}");
+                lastException = ex;
+            }
+
+            // Переключаемся на следующего агента
+            lock (_lockObject)
+            {
+                _currentAgentIndex = (_currentAgentIndex + 1) % _agents.Count;
+            }
+            attempts++;
         }
+
+        // Если все агенты не сработали, возвращаем ошибку
+        var errorMessage = $"❌ **Все AI агенты недоступны!**\n\n";
+        errorMessage += $"🔄 Попробовано агентов: {attempts}\n";
+        errorMessage += $"📊 Доступно агентов: {_agents.Count(a => a.IsAvailable)}/{_agents.Count}\n";
         
-        // Формируем контекст для отправки
-        var contextPrompt = BuildContextPrompt(chatId);
-        
-        var response = await selectedAgent.GenerateResponseAsync(contextPrompt);
-            
-        // Добавляем ответ ассистента в контекст
-        if (!response.Contains("❌") && !response.Contains("⚠️"))
+        if (lastException != null)
         {
-            AddMessageToContext(chatId, "assistant", response);
+            errorMessage += $"🔍 Последняя ошибка: {lastException.Message}";
         }
-            
-        return response;
+
+        return errorMessage;
     }
 
     private void AddMessageToContext(long chatId, string role, string content)
