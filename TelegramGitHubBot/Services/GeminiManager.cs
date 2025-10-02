@@ -34,7 +34,15 @@ public class GeminiManager
         
         if (!string.IsNullOrEmpty(primaryApiKey))
         {
+            if (primaryApiKey.Length < 20)
+            {
+                Console.WriteLine($"⚠️ ПРЕДУПРЕЖДЕНИЕ: GEMINI_API_KEY слишком короткий ({primaryApiKey.Length} символов). Возможно, ключ неполный!");
+            }
             _agents.Add(new GeminiAgent(_httpClient, primaryApiKey, "Gemini Primary"));
+        }
+        else
+        {
+            Console.WriteLine("❌ ОШИБКА: GEMINI_API_KEY не найден! Проверь переменные окружения.");
         }
 
         // Дополнительные агенты (если настроены)
