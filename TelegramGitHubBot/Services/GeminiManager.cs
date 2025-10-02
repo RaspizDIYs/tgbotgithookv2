@@ -194,14 +194,13 @@ public class GeminiManager
         
         var response = await selectedAgent.GenerateResponseAsync(contextPrompt);
             
-            // Добавляем ответ ассистента в контекст
-            if (!response.Contains("❌") && !response.Contains("⚠️"))
-            {
-                AddMessageToContext(chatId, "assistant", response);
-            }
-            
-            return response;
+        // Добавляем ответ ассистента в контекст
+        if (!response.Contains("❌") && !response.Contains("⚠️"))
+        {
+            AddMessageToContext(chatId, "assistant", response);
         }
+            
+        return response;
     }
 
     private void AddMessageToContext(long chatId, string role, string content)
@@ -252,4 +251,3 @@ public class GeminiManager
         }
     }
 }
-
