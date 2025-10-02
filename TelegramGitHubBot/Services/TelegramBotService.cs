@@ -2546,7 +2546,7 @@ help - полный список команд";
             {
                 new[]
                 {
-                    InlineKeyboardButton.WithCallbackData("📋 Скопировать ссылку", $"copy_deeplink:{deeplink}")
+                    InlineKeyboardButton.WithCallbackData("📋 Скопировать ссылку", $"copy_deeplink:{input}")
                 },
                 new[]
                 {
@@ -2571,10 +2571,61 @@ help - полный список команд";
         }
     }
 
-    private async Task HandleDeeplinkCopyAsync(long chatId, string deeplink)
+    private async Task HandleDeeplinkCopyAsync(long chatId, string input)
     {
         try
         {
+            string deeplink;
+            
+            // Проверяем, является ли ввод текстовой командой (не содержит слеши и не похож на путь к файлу)
+            if (!input.Contains('/') && !input.Contains('\\') && !input.Contains('.'))
+            {
+                // Это текстовая команда для Cursor
+                var encodedText = Uri.EscapeDataString(input);
+                deeplink = $"cursor://anysphere.cursor-deeplink/prompt?text={encodedText}";
+            }
+            else
+            {
+                // Это путь к файлу
+                var workspacePath = Environment.GetEnvironmentVariable("GOODLUCK_WORKSPACE_PATH") 
+                                  ?? Environment.GetEnvironmentVariable("CURSOR_WORKSPACE_PATH")
+                                  ?? "D:/Git/goodluckv2";
+                
+                string relativePath = input;
+                int? line = null;
+                int? column = null;
+
+                if (input.Contains(':'))
+                {
+                    var parts = input.Split(':');
+                    relativePath = parts[0];
+                    
+                    if (parts.Length > 1 && int.TryParse(parts[1], out var lineNum))
+                    {
+                        line = lineNum;
+                    }
+                    
+                    if (parts.Length > 2 && int.TryParse(parts[2], out var colNum))
+                    {
+                        column = colNum;
+                    }
+                }
+
+                relativePath = relativePath.Replace('\\', '/').TrimStart('/');
+                workspacePath = workspacePath.Replace('\\', '/');
+                
+                deeplink = $"cursor://file/{workspacePath}/{relativePath}";
+                
+                if (line.HasValue)
+                {
+                    deeplink += $"?line={line.Value}";
+                    if (column.HasValue)
+                    {
+                        deeplink += $"&column={column.Value}";
+                    }
+                }
+            }
+
             var message = "📋 *Ссылка скопирована в буфер обмена*\n\n";
             message += $"🔗 Диплинк для Cursor:\n`{deeplink}`\n\n";
             message += "💡 *Как использовать:*\n";
