@@ -22,6 +22,7 @@ public class TelegramBotService
     private readonly ITelegramBotClient _botClient;
     private readonly GitHubService _gitHubService;
     private readonly AchievementService _achievementService;
+    private readonly MessageStatsService _messageStatsService;
     private readonly Dictionary<long, NotificationSettings> _chatSettings = new();
     private readonly HashSet<string> _processedCallbacks = new();
     private readonly HashSet<int> _processedUpdateIds = new();
@@ -29,11 +30,12 @@ public class TelegramBotService
     private readonly Dictionary<string, System.Timers.Timer> _messageTimers = new();
     private System.Timers.Timer? _dailySummaryTimer;
 
-    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService)
+    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, MessageStatsService messageStatsService)
     {
         _botClient = botClient;
         _gitHubService = gitHubService ?? throw new ArgumentNullException(nameof(gitHubService));
         _achievementService = achievementService ?? throw new ArgumentNullException(nameof(achievementService));
+        _messageStatsService = messageStatsService ?? throw new ArgumentNullException(nameof(messageStatsService));
 
         // Настраиваем ежедневную сводку в 18:00 МСК
         SetupDailySummaryTimer();
@@ -98,16 +100,74 @@ public class TelegramBotService
         if (message.Text == null) return;
 
         var chatId = message.Chat.Id;
+        var fromId = message.From?.Id ?? 0;
+        var fromUsername = message.From?.Username ?? (message.From?.FirstName ?? "");
         var text = message.Text.Trim();
 
-        // Отвечаем только на команды, начинающиеся с "/"
+        // Инкремент счетчиков до обработки команд
+        var (totalChat, totalUser, chatMilestoneHit, userMilestoneHit, chatMilestone, userMilestone) = _messageStatsService.RegisterMessage(chatId, fromId);
+
+        // Поздравления по чату: 20000, 30000, 40000, ...
+        if (chatMilestoneHit && chatMilestone >= 20000)
+        {
+            var chatMsg = GetChatMilestoneMessage(chatMilestone);
+            try { await _botClient.SendTextMessageAsync(chatId, chatMsg, parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true); } catch {}
+        }
+
+        // Пользовательское поздравление на 10000 для конкретного пользователя
+        if (userMilestoneHit && userMilestone == 10000 && fromId != 0)
+        {
+            var mention = !string.IsNullOrWhiteSpace(fromUsername) ? $"@{fromUsername}" : $"id:{fromId}";
+            var userMsg = $"{mention} мастер общения! Это его {userMilestone} сообщение в этом чате!";
+            try { await _botClient.SendTextMessageAsync(chatId, userMsg, parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true); } catch {}
+        }
+
+        // Детектор мата (простые русские шаблоны)
+        if (ContainsProfanity(text))
+        {
+            var mention = !string.IsNullOrWhiteSpace(fromUsername) ? $"@{fromUsername}" : $"id:{fromId}";
+            var warn = $"Вы открываете Скверну! {mention} СКВЕРНОСЛОВ!";
+            try { await _botClient.SendTextMessageAsync(chatId, warn, parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true); } catch {}
+        }
+
+        // Команды
         if (text.StartsWith("/"))
         {
-            // Обрабатываем команды с тегом бота (/command@BotName)
-            var cleanCommand = text.Split('@')[0]; // Убираем @BotName если есть
+            var cleanCommand = text.Split('@')[0];
             await HandleCommandAsync(chatId, cleanCommand, message.From?.Username);
+            return;
         }
-        // Игнорируем все остальные сообщения (не отвечаем)
+        // Игнорируем остальные сообщения
+    }
+
+    private static bool ContainsProfanity(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var lower = text.ToLowerInvariant();
+        // Базовые формы, грубый фильтр (без регэкспов для скорости)
+        string[] words = {
+            "бля", "еба", "ебат", "ёба", "ёб", "сука", "хуй", "пизд", "сучар", "мраз", "гандон", "ебан", "уёб", "уеб"
+        };
+        foreach (var w in words)
+        {
+            if (lower.Contains(w)) return true;
+        }
+        return false;
+    }
+
+    private static string GetChatMilestoneMessage(long milestone)
+    {
+        // Немного разнообразия
+        var pool = new[]
+        {
+            $"Вы очень активны! Было написано целых {milestone} сообщений!",
+            $"Чат кипит! {milestone} сообщений достигнуты!",
+            $"Ого! Мы пробили отметку в {milestone}!",
+            $"{milestone}! Это шедевр общения!",
+            $"{milestone} сообщений — жара! Продолжаем!"
+        };
+        var idx = (int)(milestone / 10000) % pool.Length;
+        return pool[idx];
     }
 
     private NotificationSettings GetOrCreateSettings(long chatId)
@@ -144,6 +204,10 @@ public class TelegramBotService
 
                 case "/status":
                     await HandleStatusCommandAsync(chatId);
+                    break;
+
+                case "/stats":
+                    await HandleStatsCommandAsync(chatId);
                     break;
 
                 case "/commits":
@@ -1138,6 +1202,34 @@ public class TelegramBotService
             "issue" => settings.IssueNotifications ? "Включены" : "Отключены",
             _ => "Неизвестно"
         };
+    }
+
+    private async Task HandleStatsCommandAsync(long chatId)
+    {
+        var stats = _messageStatsService.GetChatStats(chatId);
+        if (stats == null)
+        {
+            await _botClient.SendTextMessageAsync(chatId, "Статистика пока пуста.", parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true);
+            return;
+        }
+
+        var top = _messageStatsService.GetTopUsers(chatId, 5);
+        var lines = new List<string>();
+        lines.Add($"Всего сообщений в чате: {stats.TotalMessages}");
+        if (top.Count > 0)
+        {
+            lines.Add("");
+            lines.Add("Топ активистов:");
+            int rank = 1;
+            foreach (var (userId, count) in top)
+            {
+                lines.Add($"{rank}. id:{userId} — {count}");
+                rank++;
+            }
+        }
+
+        var text = string.Join("\n", lines);
+        await _botClient.SendTextMessageAsync(chatId, text, parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true);
     }
 
     public bool ShouldSendNotification(long chatId, string notificationType)
