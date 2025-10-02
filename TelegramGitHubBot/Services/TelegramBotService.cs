@@ -2542,22 +2542,75 @@ help - полный список команд";
                 message += "Нажми кнопку ниже, чтобы открыть в Cursor";
             }
 
-            // Определяем текст кнопки в зависимости от типа диплинка
-            string buttonText = !input.Contains('/') && !input.Contains('\\') && !input.Contains('.') 
-                ? "🚀 Запустить в Cursor" 
-                : "📁 Открыть в Cursor";
-
-            var keyboard = new InlineKeyboardMarkup(new[]
+            // Если Telegram не поддерживает cursor:// как URL, используем HTTPS-мост
+            var bridgeBase = Environment.GetEnvironmentVariable("BRIDGE_BASE_URL");
+            string buttonUrl;
+            string buttonText;
+            if (!string.IsNullOrWhiteSpace(bridgeBase))
             {
-                new[]
+                // Готовим ссылку на мост
+                if (!input.Contains('/') && !input.Contains('\\') && !input.Contains('.'))
                 {
-                    InlineKeyboardButton.WithUrl(buttonText, deeplink)
-                },
-                new[]
-                {
-                    InlineKeyboardButton.WithCallbackData("🏠 Главное меню", "/start")
+                    // prompt bridge
+                    var enc = Uri.EscapeDataString(input);
+                    buttonUrl = $"{bridgeBase.TrimEnd('/')}/?type=prompt&text={enc}";
+                    buttonText = "🚀 Запустить в Cursor";
                 }
-            });
+                else
+                {
+                    // file bridge
+                    var workspacePath = Environment.GetEnvironmentVariable("GOODLUCK_WORKSPACE_PATH") 
+                                      ?? Environment.GetEnvironmentVariable("CURSOR_WORKSPACE_PATH")
+                                      ?? "D:/Git/goodluckv2";
+                    string relativePath = input;
+                    string lineQs = string.Empty;
+                    string columnQs = string.Empty;
+                    if (input.Contains(':'))
+                    {
+                        var parts = input.Split(':');
+                        relativePath = parts[0];
+                        if (parts.Length > 1 && int.TryParse(parts[1], out var lineNum))
+                        {
+                            lineQs = $"&line={lineNum}";
+                        }
+                        if (parts.Length > 2 && int.TryParse(parts[2], out var colNum))
+                        {
+                            columnQs = $"&column={colNum}";
+                        }
+                    }
+                    var encWs = Uri.EscapeDataString(workspacePath.Replace('\\','/'));
+                    var encPath = Uri.EscapeDataString(relativePath.Replace('\\','/').TrimStart('/'));
+                    buttonUrl = $"{bridgeBase.TrimEnd('/')}/?type=file&workspace={encWs}&path={encPath}{lineQs}{columnQs}";
+                    buttonText = "📁 Открыть в Cursor";
+                }
+            }
+            else
+            {
+                // fallback: показываем копирование через callback
+                buttonUrl = string.Empty;
+                buttonText = !input.Contains('/') && !input.Contains('\\') && !input.Contains('.') 
+                    ? "🚀 Запустить в Cursor" 
+                    : "📁 Открыть в Cursor";
+            }
+
+            InlineKeyboardMarkup keyboard;
+            if (!string.IsNullOrEmpty(buttonUrl))
+            {
+                keyboard = new InlineKeyboardMarkup(new[]
+                {
+                    new[] { InlineKeyboardButton.WithUrl(buttonText, buttonUrl) },
+                    new[] { InlineKeyboardButton.WithCallbackData("🏠 Главное меню", "/start") }
+                });
+            }
+            else
+            {
+                // Без BRIDGE_BASE_URL используем callback, который пришлет ссылку для копирования
+                keyboard = new InlineKeyboardMarkup(new[]
+                {
+                    new[] { InlineKeyboardButton.WithCallbackData(buttonText, $"copy_deeplink:{input}") },
+                    new[] { InlineKeyboardButton.WithCallbackData("🏠 Главное меню", "/start") }
+                });
+            }
 
             await _botClient.SendTextMessageAsync(
                 chatId: chatId,
