@@ -1,0 +1,1 @@
+import re; content = open("TelegramGitHubBot/Services/TelegramBotService.cs", "r", encoding="utf-8").read(); cleaned = re.sub(r"<<<<<<< HEAD.*?>>>>>>> [a-f0-9]+", "", content, flags=re.DOTALL); open("TelegramGitHubBot/Services/TelegramBotService.cs", "w", encoding="utf-8").write(cleaned)
