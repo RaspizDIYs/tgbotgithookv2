@@ -142,7 +142,12 @@ public class TelegramBotService
             await CheckSwearWordsAsync(chatId, message.From.Id, text);
         }
 
-        if (cleanCommand == "/glaistart")
+        // Команды Gemini
+        if (text.StartsWith("/"))
+        {
+            var cleanCommand = text.Split('@')[0];
+            
+            if (cleanCommand == "/glaistart")
             {
                 _geminiMode[chatId] = true;
                 await _botClient.SendTextMessageAsync(chatId, "🤖 Режим Gemini активирован! Теперь я буду отвечать через AI модель.", disableNotification: true);
@@ -244,33 +249,8 @@ public class TelegramBotService
         }
 
         // Обычная обработка команд
-        // Инкремент счетчиков до обработки команд
-        var (totalChat, totalUser, chatMilestoneHit, userMilestoneHit, chatMilestone, userMilestone) = _messageStatsService.RegisterMessage(chatId, fromId);
 
-        // Поздравления по чату: 20000, 30000, 40000, ...
-        if (chatMilestoneHit && chatMilestone >= 20000)
-        {
-            var chatMsg = GetChatMilestoneMessage(chatMilestone);
-            try { await _botClient.SendTextMessageAsync(chatId, chatMsg, parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true); } catch {}
-        }
-
-        // Пользовательское поздравление на 10000 для конкретного пользователя
-        if (userMilestoneHit && userMilestone == 10000 && fromId != 0)
-        {
-            var mention = !string.IsNullOrWhiteSpace(fromUsername) ? $"@{fromUsername}" : $"id:{fromId}";
-            var userMsg = $"{mention} мастер общения! Это его {userMilestone} сообщение в этом чате!";
-            try { await _botClient.SendTextMessageAsync(chatId, userMsg, parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true); } catch {}
-        }
-
-        // Детектор мата (простые русские шаблоны)
-        if (ContainsProfanity(text))
-        {
-            var mention = !string.IsNullOrWhiteSpace(fromUsername) ? $"@{fromUsername}" : $"id:{fromId}";
-            var warn = $"Вы открываете Скверну! {mention} СКВЕРНОСЛОВ!";
-            try { await _botClient.SendTextMessageAsync(chatId, warn, parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true); } catch {}
-        }
-
-        // Команды
+        // Обычные команды
         if (text.StartsWith("/"))
         {
             var cleanCommand = text.Split('@')[0];

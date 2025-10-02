@@ -78,7 +78,9 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
                 var githubService = new GitHubService(githubClient);
                 var achievementService = new AchievementService();
                 var messageStatsService = new MessageStatsService();
-                var telegramService = new TelegramBotService(botClient, githubService, achievementService, messageStatsService);
+                var httpClient = new HttpClient();
+                var geminiManager = new GeminiManager(httpClient, builder.Configuration);
+                var telegramService = new TelegramBotService(botClient, githubService, achievementService, geminiManager, messageStatsService);
 
                 int? lastUpdateId = null;
 
