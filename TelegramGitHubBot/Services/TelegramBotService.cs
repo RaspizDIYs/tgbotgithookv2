@@ -110,15 +110,39 @@ public class TelegramBotService
         var fromUsername = message.From?.Username ?? (message.From?.FirstName ?? "");
         var text = message.Text.Trim();
 
-<<<<<<< HEAD
+        // Инкремент счетчиков до обработки команд
+        var (totalChat, totalUser, chatMilestoneHit, userMilestoneHit, chatMilestone, userMilestone) = _messageStatsService.RegisterMessage(chatId, fromId);
+
+        // Поздравления по чату: 20000, 30000, 40000, ...
+        if (chatMilestoneHit && chatMilestone >= 20000)
+        {
+            var chatMsg = GetChatMilestoneMessage(chatMilestone);
+            try { await _botClient.SendTextMessageAsync(chatId, chatMsg, parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true); } catch {}
+        }
+
+        // Пользовательское поздравление на 10000 для конкретного пользователя
+        if (userMilestoneHit && userMilestone == 10000 && fromId != 0)
+        {
+            var mention = !string.IsNullOrWhiteSpace(fromUsername) ? $"@{fromUsername}" : $"id:{fromId}";
+            var userMsg = $"{mention} мастер общения! Это его {userMilestone} сообщение в этом чате!";
+            try { await _botClient.SendTextMessageAsync(chatId, userMsg, parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true); } catch {}
+        }
+
+        // Детектор мата (простые русские шаблоны)
+        if (ContainsProfanity(text))
+        {
+            var mention = !string.IsNullOrWhiteSpace(fromUsername) ? $"@{fromUsername}" : $"id:{fromId}";
+            var warn = $"Вы открываете Скверну! {mention} СКВЕРНОСЛОВ!";
+            try { await _botClient.SendTextMessageAsync(chatId, warn, parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true); } catch {}
+        }
+
         // Проверяем матные слова во всех сообщениях
         if (message.From != null)
         {
             await CheckSwearWordsAsync(chatId, message.From.Id, text);
         }
 
-            
-            if (cleanCommand == "/glaistart")
+        if (cleanCommand == "/glaistart")
             {
                 _geminiMode[chatId] = true;
                 await _botClient.SendTextMessageAsync(chatId, "🤖 Режим Gemini активирован! Теперь я буду отвечать через AI модель.", disableNotification: true);
@@ -220,7 +244,6 @@ public class TelegramBotService
         }
 
         // Обычная обработка команд
-=======
         // Инкремент счетчиков до обработки команд
         var (totalChat, totalUser, chatMilestoneHit, userMilestoneHit, chatMilestone, userMilestone) = _messageStatsService.RegisterMessage(chatId, fromId);
 
@@ -248,15 +271,13 @@ public class TelegramBotService
         }
 
         // Команды
->>>>>>> 17e5e3bf4f14cd6866085ee4a3f124dc3419836c
         if (text.StartsWith("/"))
         {
             var cleanCommand = text.Split('@')[0];
             await HandleCommandAsync(chatId, cleanCommand, message.From?.Username);
             return;
         }
-<<<<<<< HEAD
-=======
+
         // Игнорируем остальные сообщения
     }
 
@@ -288,7 +309,6 @@ public class TelegramBotService
         };
         var idx = (int)(milestone / 10000) % pool.Length;
         return pool[idx];
->>>>>>> 17e5e3bf4f14cd6866085ee4a3f124dc3419836c
     }
 
     private NotificationSettings GetOrCreateSettings(long chatId)
@@ -2259,7 +2279,6 @@ public class TelegramBotService
         }
     }
 
-<<<<<<< HEAD
     private void InitializeSwearWords()
     {
         // Хуй и производные
@@ -2560,7 +2579,6 @@ Start with the first easy question. Remember: everything must be in Russian!";
             await _botClient.SendTextMessageAsync(chatId, $"❌ **Ошибка тестирования:** {ex.Message}", disableNotification: true);
         }
     }
-=======
     private async Task HandleRateLimitCommandAsync(long chatId)
     {
         try
@@ -3540,5 +3558,4 @@ help - полный список команд";
         }
         return $"{number:n1} {suffixes[counter]}";
     }
->>>>>>> 17e5e3bf4f14cd6866085ee4a3f124dc3419836c
 }
