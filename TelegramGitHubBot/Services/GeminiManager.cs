@@ -30,6 +30,8 @@ public class GeminiManager
     {
         // Основной агент
         var primaryApiKey = configuration["GEMINI_API_KEY"];
+        Console.WriteLine($"🔑 GEMINI_API_KEY: {(string.IsNullOrEmpty(primaryApiKey) ? "НЕ НАЙДЕН" : $"{primaryApiKey.Substring(0, Math.Min(10, primaryApiKey.Length))}...")}");
+        
         if (!string.IsNullOrEmpty(primaryApiKey))
         {
             _agents.Add(new GeminiAgent(_httpClient, primaryApiKey, "Gemini Primary"));
@@ -37,16 +39,22 @@ public class GeminiManager
 
         // Дополнительные агенты (если настроены)
         var secondaryApiKey = configuration["GEMINI_API_KEY_2"];
+        Console.WriteLine($"🔑 GEMINI_API_KEY_2: {(string.IsNullOrEmpty(secondaryApiKey) ? "НЕ НАЙДЕН" : $"{secondaryApiKey.Substring(0, Math.Min(10, secondaryApiKey.Length))}...")}");
+        
         if (!string.IsNullOrEmpty(secondaryApiKey))
         {
             _agents.Add(new GeminiAgent(_httpClient, secondaryApiKey, "Gemini Secondary"));
         }
 
         var tertiaryApiKey = configuration["GEMINI_API_KEY_3"];
+        Console.WriteLine($"🔑 GEMINI_API_KEY_3: {(string.IsNullOrEmpty(tertiaryApiKey) ? "НЕ НАЙДЕН" : $"{tertiaryApiKey.Substring(0, Math.Min(10, tertiaryApiKey.Length))}...")}");
+        
         if (!string.IsNullOrEmpty(tertiaryApiKey))
         {
             _agents.Add(new GeminiAgent(_httpClient, tertiaryApiKey, "Gemini Tertiary"));
         }
+
+        Console.WriteLine($"🤖 Инициализировано агентов: {_agents.Count}");
 
         if (_agents.Count == 0)
         {
