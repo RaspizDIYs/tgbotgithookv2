@@ -2311,11 +2311,15 @@ public class TelegramBotService
     {
         var message = "🖱️ *Cursor - Интеграция с редактором*\n\n" +
                      "Команды для работы с Cursor:\n\n" +
-                     "📝 `/deep <путь>` - Создать диплинк\n" +
-                     "Примеры:\n" +
+                     "📝 `/deep <путь или команда>` - Создать диплинк\n" +
+                     "Примеры файлов:\n" +
                      "• `/deep src/App.tsx`\n" +
                      "• `/deep src/App.tsx:42`\n" +
                      "• `/deep src/App.tsx:42:10`\n\n" +
+                     "Примеры команд:\n" +
+                     "• `/deep Запусти в терминале билд`\n" +
+                     "• `/deep Создай компонент Button`\n" +
+                     "• `/deep Исправь ошибки в коде`\n\n" +
                      "ℹ️ Подробнее: /info";
 
         var keyboard = new InlineKeyboardMarkup(new[]
@@ -2358,9 +2362,9 @@ public class TelegramBotService
 • Мониторинг лимитов GitHub API
 
 🖱️ *Интеграция с Cursor:*
-Команда `/deep` создаёт диплинк для открытия файла в Cursor.
+Команда `/deep` создаёт диплинк для открытия файла или выполнения команды в Cursor.
 
-*Примеры использования:*
+*Примеры файлов:*
 • `/deep src/components/Button.tsx`
   Откроет файл Button.tsx
 
@@ -2370,8 +2374,19 @@ public class TelegramBotService
 • `/deep src/components/Button.tsx:150:10`
   Откроет файл на строке 150, колонке 10
 
-*Формат диплинка:*
-`cursor://file/{workspace}/{path}?line={line}&column={column}`
+*Примеры команд:*
+• `/deep Запусти в терминале билд`
+  Выполнит команду в Cursor
+
+• `/deep Создай компонент Button`
+  Попросит Cursor создать компонент
+
+• `/deep Исправь ошибки в коде`
+  Попросит Cursor исправить ошибки
+
+*Форматы диплинков:*
+• Файлы: `cursor://file/{workspace}/{path}?line={line}&column={column}`
+• Команды: `cursor://anysphere.cursor-deeplink/prompt?text={command}`
 
 *Workspace репозитория:*
 goodluckv2 (настраивается через GOODLUCK_WORKSPACE_PATH)
@@ -2422,62 +2437,82 @@ help - полный список команд";
         );
     }
 
-    private async Task HandleDeeplinkCommandAsync(long chatId, string pathInput)
+    private async Task HandleDeeplinkCommandAsync(long chatId, string input)
     {
         try
         {
-            var workspacePath = Environment.GetEnvironmentVariable("GOODLUCK_WORKSPACE_PATH") 
-                              ?? Environment.GetEnvironmentVariable("CURSOR_WORKSPACE_PATH")
-                              ?? "D:/Git/goodluckv2";
+            string deeplink;
+            string message;
             
-            string relativePath = pathInput;
-            int? line = null;
-            int? column = null;
-
-            if (pathInput.Contains(':'))
+            // Проверяем, является ли ввод текстовой командой (не содержит слеши и не похож на путь к файлу)
+            if (!input.Contains('/') && !input.Contains('\\') && !input.Contains('.'))
             {
-                var parts = pathInput.Split(':');
-                relativePath = parts[0];
+                // Это текстовая команда для Cursor
+                var encodedText = Uri.EscapeDataString(input);
+                deeplink = $"cursor://anysphere.cursor-deeplink/prompt?text={encodedText}";
                 
-                if (parts.Length > 1 && int.TryParse(parts[1], out var lineNum))
-                {
-                    line = lineNum;
-                }
+                message = "🔗 *Диплинк для Cursor (Текстовая команда)*\n\n";
+                message += $"💬 Команда: `{input}`\n";
+                message += $"📦 Тип: Текстовая команда для Cursor\n";
+                message += $"\n🔗 Ссылка:\n`{deeplink}`\n\n";
+                message += "Нажми кнопку ниже, чтобы скопировать ссылку";
+            }
+            else
+            {
+                // Это путь к файлу
+                var workspacePath = Environment.GetEnvironmentVariable("GOODLUCK_WORKSPACE_PATH") 
+                                  ?? Environment.GetEnvironmentVariable("CURSOR_WORKSPACE_PATH")
+                                  ?? "D:/Git/goodluckv2";
                 
-                if (parts.Length > 2 && int.TryParse(parts[2], out var colNum))
-                {
-                    column = colNum;
-                }
-            }
+                string relativePath = input;
+                int? line = null;
+                int? column = null;
 
-            relativePath = relativePath.Replace('\\', '/').TrimStart('/');
-            workspacePath = workspacePath.Replace('\\', '/');
-            
-            var deeplink = $"cursor://file/{workspacePath}/{relativePath}";
-            
-            if (line.HasValue)
-            {
-                deeplink += $"?line={line.Value}";
-                if (column.HasValue)
+                if (input.Contains(':'))
                 {
-                    deeplink += $"&column={column.Value}";
+                    var parts = input.Split(':');
+                    relativePath = parts[0];
+                    
+                    if (parts.Length > 1 && int.TryParse(parts[1], out var lineNum))
+                    {
+                        line = lineNum;
+                    }
+                    
+                    if (parts.Length > 2 && int.TryParse(parts[2], out var colNum))
+                    {
+                        column = colNum;
+                    }
                 }
-            }
 
-            var message = "🔗 *Диплинк для Cursor*\n\n";
-            message += $"📁 Файл: `{relativePath}`\n";
-            if (line.HasValue)
-            {
-                message += $"📍 Строка: {line.Value}";
-                if (column.HasValue)
+                relativePath = relativePath.Replace('\\', '/').TrimStart('/');
+                workspacePath = workspacePath.Replace('\\', '/');
+                
+                deeplink = $"cursor://file/{workspacePath}/{relativePath}";
+                
+                if (line.HasValue)
                 {
-                    message += $", Колонка: {column.Value}";
+                    deeplink += $"?line={line.Value}";
+                    if (column.HasValue)
+                    {
+                        deeplink += $"&column={column.Value}";
+                    }
                 }
-                message += "\n";
+
+                message = "🔗 *Диплинк для Cursor (Файл)*\n\n";
+                message += $"📁 Файл: `{relativePath}`\n";
+                if (line.HasValue)
+                {
+                    message += $"📍 Строка: {line.Value}";
+                    if (column.HasValue)
+                    {
+                        message += $", Колонка: {column.Value}";
+                    }
+                    message += "\n";
+                }
+                message += $"📦 Репозиторий: goodluckv2\n";
+                message += $"\n🔗 Ссылка:\n`{deeplink}`\n\n";
+                message += "Нажми кнопку ниже, чтобы скопировать ссылку";
             }
-            message += $"📦 Репозиторий: goodluckv2\n";
-            message += $"\n🔗 Ссылка:\n`{deeplink}`\n\n";
-            message += "Нажми кнопку ниже, чтобы скопировать ссылку";
 
             var keyboard = new InlineKeyboardMarkup(new[]
             {
@@ -2500,7 +2535,7 @@ help - полный список команд";
                 replyMarkup: keyboard
             );
 
-            Console.WriteLine($"✅ Deeplink generated for goodluckv2: {deeplink}");
+            Console.WriteLine($"✅ Deeplink generated: {deeplink}");
         }
         catch (Exception ex)
         {
