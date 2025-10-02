@@ -47,7 +47,7 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
     var enablePolling = (Environment.GetEnvironmentVariable("TELEGRAM_ENABLE_POLLING") ?? "true").Equals("true", StringComparison.OrdinalIgnoreCase);
     if (enablePolling)
     {
-        Task.Run(async () =>
+        _ = Task.Run(async () =>
         {
             try
             {

@@ -37,6 +37,9 @@ public class TelegramBotService
 
         // Настраиваем ежедневную сводку в 18:00 МСК
         SetupDailySummaryTimer();
+        
+        // Запускаем систему запланированных обновлений
+        _ = StartScheduledUpdatesTimer();
     }
 
     public async Task HandleUpdateAsync(HttpContext context)
@@ -257,6 +260,37 @@ public class TelegramBotService
                     await HandleRecalcCommandAsync(chatId);
                     break;
 
+                case "/deep":
+                    if (parts.Length > 1)
+                    {
+                        var deeplinkPath = string.Join(" ", parts.Skip(1)).Trim('"', '\'');
+                        await HandleDeeplinkCommandAsync(chatId, deeplinkPath);
+                    }
+                    else
+                    {
+                        await _botClient.SendTextMessageAsync(chatId, "Использование: /deep <путь к файлу>\nПример: /deep src/components/Button.tsx\nИли: /deep src/components/Button.tsx:150:10", disableNotification: true);
+                    }
+                    break;
+
+                case "/info":
+                    await SendInfoMessageAsync(chatId);
+                    break;
+
+                case "/ratelimit":
+                case "/limits":
+                    await HandleRateLimitCommandAsync(chatId);
+                    break;
+
+                case "/cache":
+                case "/cacheinfo":
+                    await HandleCacheInfoCommandAsync(chatId);
+                    break;
+
+                case "/protection":
+                case "/backup":
+                    await HandleDataProtectionCommandAsync(chatId);
+                    break;
+
                 case "/педик":
                     await _botClient.SendTextMessageAsync(chatId, "Сам ты педик", disableNotification: true);
                     break;
@@ -274,7 +308,7 @@ public class TelegramBotService
 
     private async Task SendWelcomeMessageAsync(long chatId)
     {
-        var message = @"🤖 GitHub Monitor Bot
+        var message = @"🤖 *GitHub Monitor Bot*
 Мониторинг репозитория goodluckv2
 
 📢 Уведомления о:
@@ -283,32 +317,23 @@ public class TelegramBotService
 • CI/CD
 • Релизах
 
-💡 *Настройте уведомления* через ⚙️ Настройки";
+💡 Выберите раздел из меню ниже:";
 
         var inlineKeyboard = new InlineKeyboardMarkup(new[]
         {
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("📊 Статус", "/status"),
-                InlineKeyboardButton.WithCallbackData("📝 Коммиты", "/commits"),
+                InlineKeyboardButton.WithCallbackData("📦 Git", "menu:git"),
+                InlineKeyboardButton.WithCallbackData("📊 Stats", "menu:stats"),
             },
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("🌿 Ветки", "/branches"),
-                InlineKeyboardButton.WithCallbackData("🔄 PR", "/prs"),
-            },
-            new[]
-            {
-                InlineKeyboardButton.WithCallbackData("⚙️ CI/CD", "/ci"),
-                InlineKeyboardButton.WithCallbackData("🚀 Деплой", "/deploy"),
-            },
-            new[]
-            {
-                InlineKeyboardButton.WithCallbackData("📈 Последняя статистика", "/laststats"),
-            },
-            new[]
-            {
+                InlineKeyboardButton.WithCallbackData("🖱️ Cursor", "menu:cursor"),
                 InlineKeyboardButton.WithCallbackData("⚙️ Настройки", "/settings"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("ℹ️ Инфо", "/info"),
                 InlineKeyboardButton.WithCallbackData("❓ Справка", "/help"),
             }
         });
@@ -316,6 +341,7 @@ public class TelegramBotService
         await _botClient.SendTextMessageAsync(
             chatId: chatId,
             text: message,
+            parseMode: ParseMode.Markdown,
             disableNotification: true,
             replyMarkup: inlineKeyboard
         );
@@ -373,82 +399,71 @@ public class TelegramBotService
 
     private async Task SendHelpMessageAsync(long chatId)
     {
-        var message = @"📋 *Команды бота:*
+        var message = @"📋 *Справка по боту*
 
+🏠 /start - Главное меню
+ℹ️ /info - Подробная информация
+
+📦 *Git - Работа с репозиторием:*
 📊 /status - Статус репозитория
-📝 /commits [ветка] [кол-во] - Коммиты (интерактивно)
+📝 /commits [ветка] [кол-во] - Коммиты
 🌿 /branches - Список веток
 🔄 /prs - Открытые PR
-⚙️ /ci [ветка] - CI/CD статус (интерактивно)
+⚙️ /ci [ветка] - CI/CD статус
 🚀 /deploy [среда] - Деплой
-📈 /laststats - Последняя статистика
-
-🔍 *Поиск и анализ:*
 🔎 /search <запрос> - Поиск по коммитам
 👥 /authors - Активные авторы
 📁 /files <sha> - Файлы в коммите
+📈 /ratelimit - GitHub API лимиты
+💾 /cache - Информация о кэше
 
-📊 *Расширенная статистика:*
-📈 /weekstats - Статистика по неделям
+📊 *Stats - Статистика и достижения:*
+📈 /laststats - Последняя статистика
+📊 /weekstats - Статистика по неделям
 🏆 /rating - Рейтинг разработчиков
 📉 /trends - Тренды активности
+🏅 /achievements - Список всех ачивок
+🥇 /leaderboard - Таблица лидеров
+🔥 /streaks - Топ стриков
+🔄 /recalc - Пересчёт статистики
 
-🏆 *Ачивки и рейтинги:*
-🏅 /achievements — просмотр ачивок (алиасы: /achivelist, /achivementlist)
-🥇 /leaderboard — таблица лидеров (алиас: /top)
-🔥 /streaks — топ стриков (алиас: /streak)
-🔄 /recalc — ручной пересчёт ачивок
+🖱️ *Cursor - Интеграция:*
+🔗 /deep <путь> - Диплинк для Cursor
+  Примеры:
+  • /deep src/App.tsx
+  • /deep src/App.tsx:42
+  • /deep src/App.tsx:42:10
 
-⚙️ *Настройки:*
+*Настройки*
 ⚙️ /settings - Настройки уведомлений
-📋 /help - Эта справка
 
 💡 *Подсказки:*
-• Команды без параметров показывают интерактивное меню
-• Используйте кнопки для быстрой навигации";
+• Используйте главное меню для удобной навигации
+• Команды без параметров показывают интерактивное меню";
 
         var inlineKeyboard = new InlineKeyboardMarkup(new[]
         {
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("📊 Статус", "/status"),
-                InlineKeyboardButton.WithCallbackData("📝 Коммиты", "/commits"),
+                InlineKeyboardButton.WithCallbackData("📦 Git", "menu:git"),
+                InlineKeyboardButton.WithCallbackData("📊 Stats", "menu:stats"),
             },
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("🌿 Ветки", "/branches"),
-                InlineKeyboardButton.WithCallbackData("🔄 PR", "/prs"),
-            },
-            new[]
-            {
-                InlineKeyboardButton.WithCallbackData("⚙️ CI/CD", "/ci"),
-                InlineKeyboardButton.WithCallbackData("🚀 Деплой", "/deploy"),
-            },
-            new[]
-            {
-                InlineKeyboardButton.WithCallbackData("📈 Статистика", "/laststats"),
-                InlineKeyboardButton.WithCallbackData("👥 Авторы", "/authors"),
-            },
-            new[]
-            {
-                InlineKeyboardButton.WithCallbackData("📊 Недельная статистика", "/weekstats"),
-                InlineKeyboardButton.WithCallbackData("🏆 Рейтинг", "/rating"),
-            },
-            new[]
-            {
-                InlineKeyboardButton.WithCallbackData("🔍 Поиск", "search_menu"),
+                InlineKeyboardButton.WithCallbackData("🖱️ Cursor", "menu:cursor"),
                 InlineKeyboardButton.WithCallbackData("⚙️ Настройки", "/settings"),
             },
             new[]
             {
+                InlineKeyboardButton.WithCallbackData("ℹ️ Инфо", "/info"),
                 InlineKeyboardButton.WithCallbackData("🏠 Главное меню", "/start"),
-                InlineKeyboardButton.WithCallbackData("🔄 Пересчёт ачивок", "/recalc"),
             }
         });
 
         await _botClient.SendTextMessageAsync(
             chatId: chatId,
             text: message,
+            parseMode: ParseMode.Markdown,
             disableNotification: true,
             replyMarkup: inlineKeyboard
         );
@@ -517,7 +532,32 @@ public class TelegramBotService
     {
         try
         {
+            // Проверяем запланированную статистику
+            var scheduledKey = "status_main";
+            var scheduledStatus = _achievementService.GetScheduledStats(scheduledKey);
+            
+            if (scheduledStatus != null)
+            {
+                await _botClient.SendTextMessageAsync(chatId, scheduledStatus, parseMode: ParseMode.Markdown, disableNotification: true);
+                return;
+            }
+            
+            // Проверяем кэш статистики
+            var cacheKey = $"status_{DateTime.UtcNow:yyyyMMddHH}";
+            var cachedStatus = _achievementService.GetCachedStats(cacheKey);
+            
+            if (cachedStatus != null)
+            {
+                await _botClient.SendTextMessageAsync(chatId, cachedStatus, parseMode: ParseMode.Markdown, disableNotification: true);
+                return;
+            }
+            
+            // Получаем свежие данные
             var status = await _gitHubService.GetRepositoryStatusAsync();
+            
+            // Кэшируем результат
+            _achievementService.CacheStats(cacheKey, status, "status");
+            
             await _botClient.SendTextMessageAsync(chatId, status, parseMode: ParseMode.Markdown, disableNotification: true);
         }
         catch (Exception ex)
@@ -530,7 +570,32 @@ public class TelegramBotService
     {
         try
         {
+            // Проверяем запланированную статистику
+            var scheduledKey = $"commits_{branch}_{count}";
+            var scheduledCommits = _achievementService.GetScheduledStats(scheduledKey);
+            
+            if (scheduledCommits != null)
+            {
+                await _botClient.SendTextMessageAsync(chatId, scheduledCommits, parseMode: ParseMode.Markdown, disableNotification: true);
+                return;
+            }
+            
+            // Проверяем кэш статистики
+            var cacheKey = $"commits_{branch}_{count}_{DateTime.UtcNow:yyyyMMddHH}";
+            var cachedCommits = _achievementService.GetCachedStats(cacheKey);
+            
+            if (cachedCommits != null)
+            {
+                await _botClient.SendTextMessageAsync(chatId, cachedCommits, parseMode: ParseMode.Markdown, disableNotification: true);
+                return;
+            }
+            
+            // Получаем свежие данные
             var commits = await _gitHubService.GetRecentCommitsAsync(branch, count);
+            
+            // Кэшируем результат
+            _achievementService.CacheStats(cacheKey, commits, "commits");
+            
             await _botClient.SendTextMessageAsync(chatId, commits, parseMode: ParseMode.Markdown, disableNotification: true);
         }
         catch (Exception ex)
@@ -648,6 +713,11 @@ public class TelegramBotService
                         await ShowAchievementPageAsync(chatId, idx + delta, messageId);
                     }
                 }
+            }
+            else if (data.StartsWith("menu:"))
+            {
+                Console.WriteLine($"📂 Processing submenu: {data}");
+                await HandleSubmenuAsync(chatId, messageId, data);
             }
             else
             {
@@ -1266,12 +1336,12 @@ public class TelegramBotService
                     catch (Exception ex)
                     {
                         Console.WriteLine($"⚠️ Failed to send Tenor GIF: {ex.Message}. Sending text fallback.");
-                        await _botClient.SendTextMessageAsync(
-                            chatId: chatId,
-                            text: message,
-                            parseMode: ParseMode.Markdown,
-                            disableNotification: targetChatId.HasValue
-                        );
+                await _botClient.SendTextMessageAsync(
+                    chatId: chatId,
+                    text: message,
+                    parseMode: ParseMode.Markdown,
+                    disableNotification: targetChatId.HasValue
+                );
                     }
                 }
                 else
@@ -1283,7 +1353,7 @@ public class TelegramBotService
                         parseMode: ParseMode.Markdown,
                         disableNotification: targetChatId.HasValue
                     );
-                    var weekendSummaryType = targetChatId.HasValue ? "requested" : "automatic";
+                var weekendSummaryType = targetChatId.HasValue ? "requested" : "automatic";
                     Console.WriteLine($"✅ {weekendSummaryType} weekend summary sent to chat {chatId} (text only)");
                 }
 
@@ -1444,9 +1514,53 @@ public class TelegramBotService
     {
         try
         {
+            // Проверяем запланированную статистику
+            var scheduledKey = "authors_main";
+            var scheduledAuthors = _achievementService.GetScheduledStats(scheduledKey);
+            
+            if (scheduledAuthors != null)
+            {
+            var keyboard = new InlineKeyboardMarkup(new[]
+                {
+                    new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+                });
+
+                await _botClient.SendTextMessageAsync(
+                    chatId: chatId,
+                    text: scheduledAuthors,
+                    parseMode: ParseMode.Markdown,
+                    disableNotification: true,
+                    replyMarkup: keyboard);
+                return;
+            }
+            
+            // Проверяем кэш статистики
+            var cacheKey = $"authors_{DateTime.UtcNow:yyyyMMddHH}";
+            var cachedAuthors = _achievementService.GetCachedStats(cacheKey);
+            
+            if (cachedAuthors != null)
+            {
+                var keyboard = new InlineKeyboardMarkup(new[]
+                {
+                    new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+                });
+
+                await _botClient.SendTextMessageAsync(
+                    chatId: chatId,
+                    text: cachedAuthors,
+                    parseMode: ParseMode.Markdown,
+                    disableNotification: true,
+                    replyMarkup: keyboard);
+                return;
+            }
+            
+            // Получаем свежие данные
             var authors = await _gitHubService.GetActiveAuthorsAsync();
             
-            var keyboard = new InlineKeyboardMarkup(new[]
+            // Кэшируем результат
+            _achievementService.CacheStats(cacheKey, authors, "authors");
+            
+            var keyboard2 = new InlineKeyboardMarkup(new[]
             {
                 new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
             });
@@ -1456,8 +1570,7 @@ public class TelegramBotService
                 text: authors,
                 parseMode: ParseMode.Markdown,
                 disableNotification: true,
-                replyMarkup: keyboard
-            );
+                replyMarkup: keyboard2);
         }
         catch (Exception ex)
         {
@@ -1828,7 +1941,25 @@ public class TelegramBotService
     {
         try
         {
-            await _botClient.SendTextMessageAsync(chatId, "🔄 Запускаю пересчёт ачивок (может занять несколько минут)...", disableNotification: true);
+            // Проверяем rate limit перед началом
+            var (remaining, limit, resetTime) = await _gitHubService.GetRateLimitAsync();
+            
+            if (remaining < 500)
+            {
+                var timeUntilReset = resetTime - DateTime.UtcNow;
+                var message = $"⚠️ *Предупреждение о лимитах GitHub API*\n\n" +
+                             $"📊 Доступно запросов: {remaining}/{limit}\n" +
+                             $"⏰ Сброс через: {timeUntilReset.Minutes} мин\n\n" +
+                             $"⚡ Пересчёт может израсходовать до 2000+ запросов!\n\n" +
+                             $"Рекомендации:\n" +
+                             $"• Подождите до сброса лимита\n" +
+                             $"• Или используйте /recalc light (только основная ветка)";
+                
+                await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
+                return;
+            }
+
+            await _botClient.SendTextMessageAsync(chatId, $"🔄 Запускаю пересчёт ачивок...\n\n📊 Доступно запросов: {remaining}/{limit}", disableNotification: true);
 
             // Сбрасываем все данные
             _achievementService.ResetAllData();
@@ -1842,21 +1973,840 @@ public class TelegramBotService
             }
 
             var totalProcessed = 0;
+            var branchCount = 0;
+            var startTime = DateTime.UtcNow;
+            
             foreach (var branch in branches)
             {
+                branchCount++;
+                await _botClient.SendTextMessageAsync(chatId, $"📊 Обрабатываю ветку {branchCount}/{branches.Count}: `{branch}`...", parseMode: ParseMode.Markdown, disableNotification: true);
+                
                 var history = await _gitHubService.GetAllCommitsWithStatsForBranchAsync(branch, 2000);
                 foreach (var c in history)
                 {
-                    _achievementService.ProcessCommit(c.Author, c.Email, c.Message, c.Date, c.Additions, c.Deletions);
+                    _achievementService.ProcessCommitBatch(c.Author, c.Email, c.Message, c.Date, c.Additions, c.Deletions);
                 }
                 totalProcessed += history.Count;
+                
+                // Показываем промежуточный прогресс
+                var (currentRemaining, _, _) = await _gitHubService.GetRateLimitAsync();
+                var used = remaining - currentRemaining;
+                Console.WriteLine($"📊 Branch {branch}: {history.Count} commits, API calls used: {used}");
             }
 
-            await _botClient.SendTextMessageAsync(chatId, $"✅ Пересчёт завершён. Обработано коммитов: {totalProcessed}", disableNotification: true);
+            // Сохраняем все изменения один раз в конце
+            _achievementService.SaveAll();
+
+            var duration = DateTime.UtcNow - startTime;
+            var (finalRemaining, _, _) = await _gitHubService.GetRateLimitAsync();
+            var totalUsed = remaining - finalRemaining;
+
+            await _botClient.SendTextMessageAsync(chatId, 
+                $"✅ *Пересчёт завершён!*\n\n" +
+                $"📊 Обработано коммитов: {totalProcessed}\n" +
+                $"🌿 Веток: {branchCount}\n" +
+                $"⏱️ Время: {duration.TotalSeconds:F1} сек\n" +
+                $"📈 API запросов: {totalUsed}\n" +
+                $"💾 Осталось: {finalRemaining}/{limit}\n\n" +
+                $"💾 Данные сохранены", 
+                parseMode: ParseMode.Markdown, 
+                disableNotification: true);
         }
         catch (Exception ex)
         {
             await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка пересчёта: {ex.Message}", disableNotification: true);
         }
+    }
+
+    private async Task HandleRateLimitCommandAsync(long chatId)
+    {
+        try
+        {
+            var (remaining, limit, resetTime) = await _gitHubService.GetRateLimitAsync();
+            var timeUntilReset = resetTime - DateTime.UtcNow;
+            var usedPercent = limit > 0 ? ((limit - remaining) * 100.0 / limit) : 0;
+
+            string status;
+            string emoji;
+            
+            if (remaining > 3000)
+            {
+                status = "Отлично";
+                emoji = "✅";
+            }
+            else if (remaining > 1000)
+            {
+                status = "Хорошо";
+                emoji = "🟢";
+            }
+            else if (remaining > 500)
+            {
+                status = "Умеренно";
+                emoji = "🟡";
+            }
+            else if (remaining > 100)
+            {
+                status = "Низкий";
+                emoji = "🟠";
+            }
+            else
+            {
+                status = "Критично";
+                emoji = "🔴";
+            }
+
+            var message = $"{emoji} *GitHub API Rate Limit*\n\n" +
+                         $"📊 *Статус:* {status}\n" +
+                         $"📈 *Доступно:* {remaining}/{limit} ({usedPercent:F1}% использовано)\n" +
+                         $"⏰ *Сброс через:* {(timeUntilReset.TotalMinutes > 0 ? $"{timeUntilReset.Minutes} мин {timeUntilReset.Seconds} сек" : "скоро")}\n" +
+                         $"🕐 *Время сброса:* {resetTime.ToLocalTime():HH:mm:ss}\n\n" +
+                         $"💡 *Рекомендации:*\n";
+
+            if (remaining < 500)
+            {
+                message += "• ⚠️ Избегайте /recalc до сброса\n";
+                message += "• Используйте простые команды\n";
+            }
+            else if (remaining < 1000)
+            {
+                message += "• ⚡ /recalc можно использовать осторожно\n";
+                message += "• Следите за лимитом\n";
+            }
+            else
+            {
+                message += "• ✅ Все команды доступны\n";
+                message += "• /recalc безопасно использовать\n";
+            }
+
+            message += $"\n📝 *Операции и их стоимость:*\n" +
+                      $"• /status, /commits, /branches: 1-5 запросов\n" +
+                      $"• /recalc: ~2000+ запросов (зависит от веток)\n" +
+                      $"• Вебхуки GitHub: 1 запрос на коммит";
+
+            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения лимитов: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleCacheInfoCommandAsync(long chatId)
+    {
+        try
+        {
+            var (userStatsCount, achievementsCount, processedShasCount, totalSizeBytes) = _achievementService.GetCacheInfo();
+            
+            var sizeKB = totalSizeBytes / 1024.0;
+            var sizeMB = sizeKB / 1024.0;
+            
+            string sizeText;
+            if (sizeMB >= 1)
+                sizeText = $"{sizeMB:F2} MB";
+            else
+                sizeText = $"{sizeKB:F1} KB";
+
+            var message = $"💾 *Информация о кэше*\n\n" +
+                         $"📊 *Статистика пользователей:* {userStatsCount}\n" +
+                         $"🏆 *Достижения:* {achievementsCount}\n" +
+                         $"📝 *Обработанные SHA:* {processedShasCount}\n" +
+                         $"💿 *Общий размер:* {sizeText}\n\n" +
+                         $"⚙️ *Настройки автоочистки:*\n" +
+                         $"• Максимум SHA: 10,000\n" +
+                         $"• Неактивные пользователи: >90 дней\n" +
+                         $"• Максимум неактивных: 50\n\n" +
+                         $"🧹 *Автоочистка происходит:*\n" +
+                         $"• При сохранении данных\n" +
+                         $"• При пересчёте (/recalc)\n" +
+                         $"• Ручная очистка: /cleancache\n\n" +
+                         $"💡 *Рекомендации:*\n" +
+                         $"• Регулярно используйте /cleancache\n" +
+                         $"• Мониторьте размер кэша\n" +
+                         $"• Старые данные удаляются автоматически";
+
+            var keyboard = new InlineKeyboardMarkup(new[]
+            {
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData("🧹 Очистить кэш", "/cleancache"),
+                    InlineKeyboardButton.WithCallbackData("📈 API лимиты", "/ratelimit"),
+                },
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData("🏠 Главное меню", "/start")
+                }
+            });
+
+            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true, replyMarkup: keyboard);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения информации о кэше: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleCleanCacheCommandAsync(long chatId)
+    {
+        try
+        {
+            await _botClient.SendTextMessageAsync(chatId, "🧹 Запускаю очистку кэша...", disableNotification: true);
+            
+            var beforeInfo = _achievementService.GetCacheInfo();
+            _achievementService.ForceCleanup();
+            var afterInfo = _achievementService.GetCacheInfo();
+            
+            var usersRemoved = beforeInfo.userStatsCount - afterInfo.userStatsCount;
+            var shasRemoved = beforeInfo.processedShasCount - afterInfo.processedShasCount;
+            var sizeSaved = beforeInfo.totalSizeBytes - afterInfo.totalSizeBytes;
+            
+            var sizeKB = sizeSaved / 1024.0;
+            var sizeMB = sizeKB / 1024.0;
+            
+            string sizeText;
+            if (sizeMB >= 1)
+                sizeText = $"{sizeMB:F2} MB";
+            else
+                sizeText = $"{sizeKB:F1} KB";
+
+            var message = $"✅ *Очистка кэша завершена!*\n\n" +
+                         $"📊 *Результаты:*\n" +
+                         $"• Удалено пользователей: {usersRemoved}\n" +
+                         $"• Удалено SHA: {shasRemoved}\n" +
+                         $"• Освобождено места: {sizeText}\n\n" +
+                         $"📈 *Текущее состояние:*\n" +
+                         $"• Пользователи: {afterInfo.userStatsCount}\n" +
+                         $"• Достижения: {afterInfo.achievementsCount}\n" +
+                         $"• SHA: {afterInfo.processedShasCount}\n\n" +
+                         $"💾 Данные сохранены";
+
+            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка очистки кэша: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleSubmenuAsync(long chatId, int messageId, string menuData)
+    {
+        try
+        {
+            var menuType = menuData.Split(':')[1];
+
+            switch (menuType)
+            {
+                case "git":
+                    await ShowGitMenuAsync(chatId, messageId);
+                    break;
+                case "stats":
+                    await ShowStatsMenuAsync(chatId, messageId);
+                    break;
+                case "cursor":
+                    await ShowCursorMenuAsync(chatId, messageId);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error handling submenu: {ex.Message}");
+        }
+    }
+
+    private async Task ShowGitMenuAsync(long chatId, int messageId)
+    {
+        var message = "📦 *Git - Работа с репозиторием*\n\n" +
+                     "Выберите действие:";
+
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("📊 Статус", "/status"),
+                InlineKeyboardButton.WithCallbackData("📝 Коммиты", "/commits"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🌿 Ветки", "/branches"),
+                InlineKeyboardButton.WithCallbackData("🔄 PR", "/prs"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⚙️ CI/CD", "/ci"),
+                InlineKeyboardButton.WithCallbackData("🚀 Деплой", "/deploy"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🔍 Поиск", "search_menu"),
+                InlineKeyboardButton.WithCallbackData("👥 Авторы", "/authors"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/start")
+            }
+        });
+
+        await _botClient.EditMessageTextAsync(
+            chatId: chatId,
+            messageId: messageId,
+            text: message,
+            parseMode: ParseMode.Markdown,
+            replyMarkup: keyboard
+        );
+    }
+
+    private async Task ShowStatsMenuAsync(long chatId, int messageId)
+    {
+        var message = "📊 *Stats - Статистика и достижения*\n\n" +
+                     "Выберите раздел:";
+
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("📈 Последняя статистика", "/laststats"),
+                InlineKeyboardButton.WithCallbackData("📊 По неделям", "/weekstats"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🏆 Рейтинг", "/rating"),
+                InlineKeyboardButton.WithCallbackData("📉 Тренды", "/trends"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🏅 Ачивки", "/achivelist"),
+                InlineKeyboardButton.WithCallbackData("🥇 Лидеры", "/leaderboard"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🔥 Стрики", "/streaks"),
+                InlineKeyboardButton.WithCallbackData("📈 API лимиты", "/ratelimit"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("💾 Кэш", "/cache"),
+                InlineKeyboardButton.WithCallbackData("🔄 Пересчёт", "/recalc"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/start")
+            }
+        });
+
+        await _botClient.EditMessageTextAsync(
+            chatId: chatId,
+            messageId: messageId,
+            text: message,
+            parseMode: ParseMode.Markdown,
+            replyMarkup: keyboard
+        );
+    }
+
+    private async Task ShowCursorMenuAsync(long chatId, int messageId)
+    {
+        var message = "🖱️ *Cursor - Интеграция с редактором*\n\n" +
+                     "Команды для работы с Cursor:\n\n" +
+                     "📝 `/deep <путь>` - Создать диплинк\n" +
+                     "Примеры:\n" +
+                     "• `/deep src/App.tsx`\n" +
+                     "• `/deep src/App.tsx:42`\n" +
+                     "• `/deep src/App.tsx:42:10`\n\n" +
+                     "ℹ️ Подробнее: /info";
+
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("ℹ️ Подробная инфо", "/info"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/start")
+            }
+        });
+
+        await _botClient.EditMessageTextAsync(
+            chatId: chatId,
+            messageId: messageId,
+            text: message,
+            parseMode: ParseMode.Markdown,
+            replyMarkup: keyboard
+        );
+    }
+
+    private async Task SendInfoMessageAsync(long chatId)
+    {
+        var message = @"ℹ️ *Информация о боте*
+
+🤖 *GitHub Monitor Bot*
+Бот для мониторинга репозитория RaspizDIYs/goodluckv2
+
+📦 *Git функционал:*
+• Отслеживание коммитов, PR, CI/CD
+• Статистика по веткам и авторам
+• Поиск по истории коммитов
+
+📊 *Статистика и достижения:*
+• Система ачивок и рейтингов
+• Стрики коммитов
+• Детальная аналитика активности
+• Мониторинг лимитов GitHub API
+
+🖱️ *Интеграция с Cursor:*
+Команда `/deep` создаёт диплинк для открытия файла в Cursor.
+
+*Примеры использования:*
+• `/deep src/components/Button.tsx`
+  Откроет файл Button.tsx
+
+• `/deep src/components/Button.tsx:150`
+  Откроет файл на строке 150
+
+• `/deep src/components/Button.tsx:150:10`
+  Откроет файл на строке 150, колонке 10
+
+*Формат диплинка:*
+`cursor://file/{workspace}/{path}?line={line}&column={column}`
+
+*Workspace репозитория:*
+goodluckv2 (настраивается через GOODLUCK_WORKSPACE_PATH)
+
+📈 *Мониторинг API:*
+Команда `/ratelimit` показывает текущие лимиты GitHub API.
+
+⚠️ *Важно:*
+• GitHub API: 5000 запросов/час
+• `/recalc` использует ~2000+ запросов
+• Проверяйте лимиты перед пересчётом
+• Данные кешируются в JSON файлах
+
+*Хранение данных*
+Бот использует JSON файлы как память
+- user_stats.json - статистика пользователей
+- achievements.json - полученные достижения
+- processed_shas.json - обработанные коммиты
+
+*Умная очистка кэша*
+- Автоматическая очистка старых данных
+- Максимум 10,000 SHA в кэше
+- Удаление неактивных пользователей (более 90 дней)
+- Команды cache, cleancache
+
+*Настройки*
+Используйте settings для настройки уведомлений
+
+*Справка*
+help - полный список команд";
+
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🏠 Главное меню", "/start"),
+                InlineKeyboardButton.WithCallbackData("❓ Справка", "/help"),
+            }
+        });
+
+        await _botClient.SendTextMessageAsync(
+            chatId: chatId,
+            text: message,
+            parseMode: ParseMode.Markdown,
+            disableWebPagePreview: true,
+            disableNotification: true,
+            replyMarkup: keyboard
+        );
+    }
+
+    private async Task HandleDeeplinkCommandAsync(long chatId, string pathInput)
+    {
+        try
+        {
+            var workspacePath = Environment.GetEnvironmentVariable("GOODLUCK_WORKSPACE_PATH") 
+                              ?? Environment.GetEnvironmentVariable("CURSOR_WORKSPACE_PATH")
+                              ?? "D:/Git/goodluckv2";
+            
+            string relativePath = pathInput;
+            int? line = null;
+            int? column = null;
+
+            if (pathInput.Contains(':'))
+            {
+                var parts = pathInput.Split(':');
+                relativePath = parts[0];
+                
+                if (parts.Length > 1 && int.TryParse(parts[1], out var lineNum))
+                {
+                    line = lineNum;
+                }
+                
+                if (parts.Length > 2 && int.TryParse(parts[2], out var colNum))
+                {
+                    column = colNum;
+                }
+            }
+
+            relativePath = relativePath.Replace('\\', '/').TrimStart('/');
+            workspacePath = workspacePath.Replace('\\', '/');
+            
+            var deeplink = $"cursor://file/{workspacePath}/{relativePath}";
+            
+            if (line.HasValue)
+            {
+                deeplink += $"?line={line.Value}";
+                if (column.HasValue)
+                {
+                    deeplink += $"&column={column.Value}";
+                }
+            }
+
+            var message = "🔗 *Диплинк для Cursor*\n\n";
+            message += $"📁 Файл: `{relativePath}`\n";
+            if (line.HasValue)
+            {
+                message += $"📍 Строка: {line.Value}";
+                if (column.HasValue)
+                {
+                    message += $", Колонка: {column.Value}";
+                }
+                message += "\n";
+            }
+            message += $"📦 Репозиторий: goodluckv2\n";
+            message += $"\n🔗 Ссылка:\n`{deeplink}`\n\n";
+            message += "Нажми кнопку ниже, чтобы открыть в Cursor";
+
+            var keyboard = new InlineKeyboardMarkup(new[]
+            {
+                new[]
+                {
+                    InlineKeyboardButton.WithUrl("🖱️ Открыть в Cursor", deeplink)
+                },
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData("🏠 Главное меню", "/start")
+                }
+            });
+
+            await _botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: message,
+                parseMode: ParseMode.Markdown,
+                disableWebPagePreview: true,
+                disableNotification: true,
+                replyMarkup: keyboard
+            );
+
+            Console.WriteLine($"✅ Deeplink generated for goodluckv2: {deeplink}");
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка генерации диплинка: {ex.Message}", disableNotification: true);
+        }
+    }
+    
+    private Task StartScheduledUpdatesTimer()
+    {
+        // Таймер для проверки расписания каждые 30 минут
+        var scheduledTimer = new System.Timers.Timer(TimeSpan.FromMinutes(30).TotalMilliseconds);
+        scheduledTimer.Elapsed += async (sender, e) => 
+        {
+            try
+            {
+                await CheckScheduledUpdates();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Критическая ошибка в таймере обновлений: {ex.Message}");
+            }
+        };
+        scheduledTimer.AutoReset = true;
+        scheduledTimer.Start();
+        
+        Console.WriteLine("⏰ Система запланированных обновлений запущена (проверка каждые 30 минут)");
+        return Task.CompletedTask;
+    }
+    
+    private async Task CheckScheduledUpdates()
+    {
+        try
+        {
+            if (!_achievementService.ShouldUpdateScheduledStats())
+            {
+                return;
+            }
+            
+            Console.WriteLine("🔄 Начинаю запланированное обновление статистики...");
+            
+            // Проверяем API лимиты
+            var (remaining, limit, resetTime) = await _gitHubService.GetRateLimitAsync();
+            
+            if (remaining < _achievementService.GetMinApiCallsThreshold())
+            {
+                Console.WriteLine($"⚠️ Пропуск запланированного обновления - мало API вызовов: {remaining}/{limit}");
+                Console.WriteLine($"⏰ Следующая проверка через час или при сбросе лимитов");
+                return;
+            }
+            
+            // Создаем резервную копию перед обновлением
+            _achievementService.CreateBackup();
+            
+            // Обновляем все статистические данные поочередно
+            var success = await UpdateAllScheduledStatsSequentially();
+            
+            if (success)
+            {
+                // Отмечаем время обновления
+                _achievementService.MarkScheduledUpdate();
+                
+                // Очищаем старые данные только после успешного обновления
+                _achievementService.ClearOldScheduledStats();
+                
+                // Очищаем резервную копию
+                _achievementService.ClearBackup();
+                
+                Console.WriteLine($"✅ Запланированное обновление завершено успешно");
+            }
+            else
+            {
+                // Восстанавливаем из резервной копии при сбое
+                Console.WriteLine("🔄 Восстанавливаю данные из резервной копии...");
+                _achievementService.RestoreFromBackup();
+            }
+            
+            // Проверяем финальные лимиты
+            var (finalRemaining, _, _) = await _gitHubService.GetRateLimitAsync();
+            Console.WriteLine($"📊 API вызовов осталось: {finalRemaining}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Ошибка запланированного обновления: {ex.Message}");
+            
+            // Восстанавливаем из резервной копии при критической ошибке
+            if (_achievementService.IsBackupValid())
+            {
+                Console.WriteLine("🔄 Восстанавливаю данные из резервной копии после ошибки...");
+                _achievementService.RestoreFromBackup();
+            }
+        }
+    }
+    
+    private async Task<bool> UpdateAllScheduledStatsSequentially()
+    {
+        try
+        {
+            var updateTasks = new List<(string key, string type, string parameters, Func<Task<string>> getData)>();
+            
+            var task1 = ("status_main", "status", "", (Func<Task<string>>)(() => _gitHubService.GetRepositoryStatusAsync()));
+            var task2 = ("authors_main", "authors", "", (Func<Task<string>>)(() => _gitHubService.GetActiveAuthorsAsync()));
+            var task3 = ("weekly_0", "weekly", "", (Func<Task<string>>)(() => _gitHubService.GetWeeklyStatsAsync()));
+            var task4 = ("achievements_main", "achievements", "", (Func<Task<string>>)(() => Task.FromResult(_achievementService.GetAchievementStats())));
+            var task5 = ("streaks_main", "streaks", "", (Func<Task<string>>)(() => Task.FromResult(_achievementService.GetStreaks())));
+            var task6 = ("rating_main", "rating", "", (Func<Task<string>>)(() => Task.FromResult(_achievementService.GetRating())));
+            var task7 = ("leaderboard_main", "leaderboard", "", (Func<Task<string>>)(() => Task.FromResult(_achievementService.GetLeaderboard())));
+            
+            updateTasks.Add(task1);
+            updateTasks.Add(task2);
+            updateTasks.Add(task3);
+            updateTasks.Add(task4);
+            updateTasks.Add(task5);
+            updateTasks.Add(task6);
+            updateTasks.Add(task7);
+            
+            var successCount = 0;
+            var totalTasks = updateTasks.Count;
+            
+            foreach (var task in updateTasks)
+            {
+                try
+                {
+                    // Проверяем API лимиты перед каждым обновлением
+                    var (remaining, limit, resetTime) = await _gitHubService.GetRateLimitAsync();
+                    
+                    if (remaining < _achievementService.GetMinApiCallsThreshold())
+                    {
+                        Console.WriteLine($"⚠️ Прерывание обновления - мало API вызовов: {remaining}/{limit}");
+                        Console.WriteLine($"⏰ Сброс лимитов в: {resetTime:HH:mm dd.MM.yyyy}");
+                        break;
+                    }
+                    
+                    Console.WriteLine($"🔄 Обновляю {task.type}...");
+                    
+                    // Получаем данные
+                    var data = await task.getData();
+                    
+                    // Проверяем, что данные не пустые
+                    if (string.IsNullOrWhiteSpace(data))
+                    {
+                        Console.WriteLine($"⚠️ Получены пустые данные для {task.type}, пропускаю");
+                        continue;
+                    }
+                    
+                    // Безопасно сохраняем данные
+                    var saved = _achievementService.SafeSaveScheduledStats(task.key, data, task.type, task.parameters);
+                    
+                    if (saved)
+                    {
+                        successCount++;
+                        Console.WriteLine($"✅ {task.type} обновлен успешно");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"❌ Ошибка сохранения {task.type}");
+                    }
+                    
+                    // Небольшая пауза между обновлениями
+                    await Task.Delay(1000);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"❌ Ошибка обновления {task.type}: {ex.Message}");
+                }
+            }
+            
+            // Обновляем коммиты для основных веток (если остались API вызовы)
+            try
+            {
+                var (remaining, _, _) = await _gitHubService.GetRateLimitAsync();
+                if (remaining >= _achievementService.GetMinApiCallsThreshold())
+                {
+                    var branches = await _gitHubService.GetBranchesListAsync();
+                    foreach (var branch in branches.Take(3))
+                    {
+                        var commits = await _gitHubService.GetRecentCommitsAsync(branch, 10);
+                        if (!string.IsNullOrWhiteSpace(commits))
+                        {
+                            var saved = _achievementService.SafeSaveScheduledStats($"commits_{branch}_10", commits, "commits", branch);
+                            if (saved) successCount++;
+                        }
+                        
+                        // Проверяем лимиты после каждого обновления коммитов
+                        var (currentRemaining, _, _) = await _gitHubService.GetRateLimitAsync();
+                        if (currentRemaining < _achievementService.GetMinApiCallsThreshold())
+                        {
+                            Console.WriteLine($"⚠️ Прерывание обновления коммитов - мало API вызовов: {currentRemaining}");
+                            break;
+                        }
+                        
+                        await Task.Delay(1000);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Ошибка обновления коммитов: {ex.Message}");
+            }
+            
+            var success = successCount >= totalTasks * 0.7; // Считаем успешным если обновлено 70% задач
+            
+            Console.WriteLine($"📊 Результат обновления: {successCount}/{totalTasks} задач выполнено успешно");
+            
+            // Проверяем целостность данных
+            var isValid = _achievementService.ValidateDataIntegrity();
+            if (!isValid)
+            {
+                Console.WriteLine("⚠️ Обнаружены проблемы с целостностью данных");
+                return false;
+            }
+            
+            return success;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Критическая ошибка поочередного обновления: {ex.Message}");
+            return false;
+        }
+    }
+    
+    private async Task HandleScheduledInfoCommandAsync(long chatId)
+    {
+        try
+        {
+            var (count, sizeBytes, byType) = _achievementService.GetScheduledStatsInfo();
+            var mskTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+            var nowMsk = TimeZoneInfo.ConvertTime(DateTime.UtcNow, mskTimeZone);
+            
+            var message = $"⏰ *Информация о запланированных обновлениях*\n\n" +
+                         $"🕐 *Расписание обновлений:*\n" +
+                         $"• 09:00 МСК\n" +
+                         $"• 18:00 МСК\n" +
+                         $"• 00:00 МСК\n\n" +
+                         $"📊 *Текущее состояние:*\n" +
+                         $"• Записей в кэше: {count}\n" +
+                         $"• Размер данных: {FormatBytes(sizeBytes)}\n" +
+                         $"• По типам:\n";
+            
+            foreach (var type in byType)
+            {
+                message += $"  - {type.Key}: {type.Value}\n";
+            }
+            
+            message += $"\n🔄 *Автоматически обновляются:*\n" +
+                      $"• Статус репозитория\n" +
+                      $"• Авторы и коммиты\n" +
+                      $"• Недельная статистика\n" +
+                      $"• Ачивки и стрики\n" +
+                      $"• Рейтинг и лидерборд\n\n" +
+                      $"💾 *Управление данными:*\n" +
+                      $"• Данные сохраняются в JSON\n" +
+                      $"• Старые данные очищаются через 3 дня\n" +
+                      $"• Проверка расписания каждые 30 минут\n" +
+                      $"• Текущее время МСК: {nowMsk:HH:mm dd.MM.yyyy}";
+            
+            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения информации о расписании: {ex.Message}", disableNotification: true);
+        }
+    }
+    
+    private async Task HandleDataProtectionCommandAsync(long chatId)
+    {
+        try
+        {
+            var (remaining, limit, resetTime) = await _gitHubService.GetRateLimitAsync();
+            var isValid = _achievementService.ValidateDataIntegrity();
+            var hasBackup = _achievementService.IsBackupValid();
+            var (count, sizeBytes, byType) = _achievementService.GetScheduledStatsInfo();
+            
+            var message = $"🛡️ *Информация о защите данных*\n\n" +
+                         $"🔒 *Состояние защиты:*\n" +
+                         $"• Целостность данных: {(isValid ? "✅ В порядке" : "❌ Нарушена")}\n" +
+                         $"• Резервная копия: {(hasBackup ? "✅ Доступна" : "❌ Отсутствует")}\n" +
+                         $"• Записей в кэше: {count}\n" +
+                         $"• Размер данных: {FormatBytes(sizeBytes)}\n\n" +
+                         $"📊 *API лимиты:*\n" +
+                         $"• Доступно: {remaining}/{limit}\n" +
+                         $"• Минимум для обновления: {_achievementService.GetMinApiCallsThreshold()}\n" +
+                         $"• Сброс лимитов: {resetTime:HH:mm dd.MM.yyyy}\n\n" +
+                         $"🔄 *Механизмы защиты:*\n" +
+                         $"• Резервное копирование перед обновлением\n" +
+                         $"• Поочередное обновление с проверкой лимитов\n" +
+                         $"• Восстановление при сбоях\n" +
+                         $"• Проверка целостности данных\n" +
+                         $"• Очистка только после успешного обновления\n\n" +
+                         $"💡 *Автоматические функции:*\n" +
+                         $"• Обновление прерывается при низких лимитах\n" +
+                         $"• Данные восстанавливаются при ошибках\n" +
+                         $"• Проверка каждые 30 минут\n" +
+                         $"• Безопасное сохранение с валидацией";
+            
+            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения информации о защите: {ex.Message}", disableNotification: true);
+        }
+    }
+    
+    private static string FormatBytes(long bytes)
+    {
+        string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
+        int counter = 0;
+        decimal number = bytes;
+        while (Math.Round(number / 1024) >= 1)
+        {
+            number = number / 1024;
+            counter++;
+        }
+        return $"{number:n1} {suffixes[counter]}";
     }
 }

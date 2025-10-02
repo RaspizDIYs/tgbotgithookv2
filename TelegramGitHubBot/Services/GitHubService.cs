@@ -19,6 +19,22 @@ public class GitHubService
         Console.WriteLine($"🔧 GitHubService configured for {_owner}/{_repo}");
     }
 
+    public async Task<(int remaining, int limit, DateTime resetTime)> GetRateLimitAsync()
+    {
+        try
+        {
+            var rateLimit = await _client.RateLimit.GetRateLimits();
+            var coreLimit = rateLimit.Resources.Core;
+            
+            return (coreLimit.Remaining, coreLimit.Limit, coreLimit.Reset.DateTime);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting rate limit: {ex.Message}");
+            return (0, 0, DateTime.UtcNow);
+        }
+    }
+
     public class GitCommitInfo
     {
         public string Sha { get; set; } = string.Empty;
