@@ -728,6 +728,11 @@ public class TelegramBotService
             else
             {
                 Console.WriteLine("📝 Processing regular command");
+                // Проверяем, нужно ли удалить предыдущее сообщение
+                if (ShouldDeletePreviousMessage(data))
+                {
+                    await DeleteMessageAsync(chatId, messageId);
+                }
                 // Обрабатываем обычную команду из callback data
                 await HandleCommandAsync(chatId, data, callbackQuery.From?.Username);
             }
@@ -836,6 +841,23 @@ public class TelegramBotService
         {
             Console.WriteLine($"❌ Failed to delete message {messageId}: {ex.Message}");
         }
+    }
+
+    private bool ShouldDeletePreviousMessage(string callbackData)
+    {
+        // Удаляем предыдущее сообщение при нажатии кнопок навигации
+        var deleteCommands = new[]
+        {
+            "/start",           // Главное меню
+            "/help",            // Справка
+            "/info",            // Информация
+            "/settings",        // Настройки
+            "menu:git",         // Git меню
+            "menu:stats",       // Stats меню
+            "menu:cursor"       // Cursor меню
+        };
+
+        return deleteCommands.Contains(callbackData);
     }
 
     private async Task RestorePushMessageAsync(long chatId, string commitSha, string repoName)
@@ -1088,12 +1110,12 @@ public class TelegramBotService
                 }
             });
 
-            await _botClient.EditMessageTextAsync(
+            await _botClient.SendTextMessageAsync(
                 chatId: chatId,
-                messageId: messageId,
                 text: message,
                 parseMode: ParseMode.Markdown,
                 disableWebPagePreview: true,
+                disableNotification: true,
                 replyMarkup: inlineKeyboard
             );
 
@@ -2197,6 +2219,9 @@ public class TelegramBotService
     {
         try
         {
+            // Удаляем предыдущее сообщение при переходе в подменю
+            await DeleteMessageAsync(chatId, messageId);
+            
             var menuType = menuData.Split(':')[1];
 
             switch (menuType)
@@ -2251,11 +2276,12 @@ public class TelegramBotService
             }
         });
 
-        await _botClient.EditMessageTextAsync(
+        await _botClient.SendTextMessageAsync(
             chatId: chatId,
-            messageId: messageId,
             text: message,
             parseMode: ParseMode.Markdown,
+            disableWebPagePreview: true,
+            disableNotification: true,
             replyMarkup: keyboard
         );
     }
@@ -2298,11 +2324,12 @@ public class TelegramBotService
             }
         });
 
-        await _botClient.EditMessageTextAsync(
+        await _botClient.SendTextMessageAsync(
             chatId: chatId,
-            messageId: messageId,
             text: message,
             parseMode: ParseMode.Markdown,
+            disableWebPagePreview: true,
+            disableNotification: true,
             replyMarkup: keyboard
         );
     }
@@ -2334,11 +2361,12 @@ public class TelegramBotService
             }
         });
 
-        await _botClient.EditMessageTextAsync(
+        await _botClient.SendTextMessageAsync(
             chatId: chatId,
-            messageId: messageId,
             text: message,
             parseMode: ParseMode.Markdown,
+            disableWebPagePreview: true,
+            disableNotification: true,
             replyMarkup: keyboard
         );
     }
