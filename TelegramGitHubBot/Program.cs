@@ -85,7 +85,8 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
 #pragma warning disable CA1416 // Validate platform compatibility
                 var gifTextEditorService = new GifTextEditorService(httpClient);
 #pragma warning restore CA1416 // Validate platform compatibility
-                var telegramService = new TelegramBotService(botClient, githubService, achievementService, geminiManager, messageStatsService, tenorService, gifTextEditorService);
+                var chatActivityTracker = new ChatActivityTracker(tenorService, geminiManager, botClient);
+                var telegramService = new TelegramBotService(botClient, githubService, achievementService, geminiManager, messageStatsService, tenorService, gifTextEditorService, chatActivityTracker);
 
                 int? lastUpdateId = null;
 
@@ -276,6 +277,7 @@ builder.Services.AddHttpClient<TenorService>();
 #pragma warning disable CA1416 // Validate platform compatibility
 builder.Services.AddHttpClient<GifTextEditorService>();
 #pragma warning restore CA1416 // Validate platform compatibility
+builder.Services.AddSingleton<ChatActivityTracker>();
 
 var app = builder.Build();
 

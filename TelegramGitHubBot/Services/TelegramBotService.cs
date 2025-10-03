@@ -37,8 +37,9 @@ public class TelegramBotService
     private readonly TenorService _tenorService;
     private readonly GifTextEditorService _gifTextEditorService;
     private readonly Dictionary<long, string> _pendingGifTexts = new(); // Для ожидания текста для GIF
+    private readonly ChatActivityTracker _chatActivityTracker;
 
-    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService, TenorService tenorService, GifTextEditorService gifTextEditorService)
+    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService, TenorService tenorService, GifTextEditorService gifTextEditorService, ChatActivityTracker chatActivityTracker)
     {
         _botClient = botClient;
         _gitHubService = gitHubService ?? throw new ArgumentNullException(nameof(gitHubService));
@@ -47,6 +48,7 @@ public class TelegramBotService
         _messageStatsService = messageStatsService ?? throw new ArgumentNullException(nameof(messageStatsService));
         _tenorService = tenorService ?? throw new ArgumentNullException(nameof(tenorService));
         _gifTextEditorService = gifTextEditorService ?? throw new ArgumentNullException(nameof(gifTextEditorService));
+        _chatActivityTracker = chatActivityTracker ?? throw new ArgumentNullException(nameof(chatActivityTracker));
 
         InitializeSwearWords();
         SetupDailySummaryTimer();
@@ -250,6 +252,16 @@ public class TelegramBotService
                 await ShowGifSettingsAsync(chatId);
                 return;
             }
+            else if (cleanCommand == "/chatactivity")
+            {
+                await ShowChatActivityAsync(chatId);
+                return;
+            }
+            else if (cleanCommand == "/resetactivity")
+            {
+                await ResetChatActivityAsync(chatId);
+                return;
+            }
         }
 
         // Если активна игра, обрабатываем ответ игрока
@@ -293,6 +305,17 @@ public class TelegramBotService
             var cleanCommand = text.Split('@')[0];
             await HandleCommandAsync(chatId, cleanCommand, message.From?.Username);
             return;
+        }
+
+        // Отслеживаем активность диалога для автоматического AI
+        if (message.From != null && !string.IsNullOrWhiteSpace(text))
+        {
+            await _chatActivityTracker.TrackMessageAsync(
+                chatId, 
+                message.From.Id, 
+                message.From.Username ?? message.From.FirstName, 
+                text, 
+                DateTime.UtcNow);
         }
 
         // Игнорируем остальные сообщения
@@ -674,6 +697,10 @@ public class TelegramBotService
 😊 /gifemotion <эмоция> - GIF по эмоции
 📝 /giftext - Добавить текст на GIF
 ⚙️ /gifsettings - Настройки GIF
+
+🤖 *AI Диалоги:*
+📊 /chatactivity - Статистика активности
+🔄 /resetactivity - Сбросить активность
 
 🖱️ *Cursor - Интеграция:*
 🔗 /deep <путь> - Диплинк для Cursor
@@ -4153,6 +4180,77 @@ help - полный список команд";
             return "любовь";
             
         return "мемы"; // По умолчанию
+    }
+
+    private async Task ShowChatActivityAsync(long chatId)
+    {
+        try
+        {
+            var activity = _chatActivityTracker.GetActivity(chatId);
+            
+            if (activity == null || activity.Messages.Count == 0)
+            {
+                await _botClient.SendTextMessageAsync(chatId, 
+                    "📊 **Статистика активности диалога**\n\nАктивность не обнаружена. Начните диалог с другими пользователями!", 
+                    parseMode: ParseMode.Markdown, 
+                    disableNotification: true);
+                return;
+            }
+
+            var uniqueUsers = activity.Messages.Select(m => m.UserId).Distinct().Count();
+            var totalMessages = activity.Messages.Count;
+            var oldestMessage = activity.Messages.Min(m => m.Timestamp);
+            var newestMessage = activity.Messages.Max(m => m.Timestamp);
+            var timeSpan = newestMessage - oldestMessage;
+            
+            var status = activity.AIActivated ? "✅ Активирован" : "⏳ Ожидание";
+            var memeStatus = activity.MemeSent ? "✅ Отправлен" : "⏳ Не отправлен";
+
+            var message = $@"📊 **Статистика активности диалога**
+
+👥 **Участники:** {uniqueUsers}
+💬 **Сообщений:** {totalMessages}
+⏰ **Период:** {timeSpan.TotalMinutes:F1} минут
+🤖 **AI статус:** {status}
+🎬 **Мем статус:** {memeStatus}
+
+**Условия активации AI:**
+• Минимум 2 участника ✅
+• Минимум 5 сообщений {(totalMessages >= 5 ? "✅" : "❌")}
+• Временной интервал ≤ 5 минут {(timeSpan.TotalMinutes <= 5 ? "✅" : "❌")}
+
+**Последние сообщения:**";
+            
+            var recentMessages = activity.Messages
+                .OrderByDescending(m => m.Timestamp)
+                .Take(5)
+                .Select(m => $"• {m.Username}: {m.Text.Substring(0, Math.Min(50, m.Text.Length))}...")
+                .ToArray();
+            
+            message += "\n" + string.Join("\n", recentMessages);
+
+            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения статистики: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task ResetChatActivityAsync(long chatId)
+    {
+        try
+        {
+            _chatActivityTracker.ResetActivity(chatId);
+            await _botClient.SendTextMessageAsync(chatId, 
+                "🔄 **Активность диалога сброшена!**\n\nСистема отслеживания активности перезапущена.", 
+                parseMode: ParseMode.Markdown, 
+                disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка сброса активности: {ex.Message}", disableNotification: true);
+        }
     }
 
     private async Task AddGifToMemeGameAsync(long chatId, string aiResponse, GameState gameState)
