@@ -25,7 +25,7 @@ public class TenorService
     {
         try
         {
-            var url = $"https://g.tenor.com/v1/search?q={Uri.EscapeDataString(query)}&key={_apiKey}&limit={limit}&media_filter=gif&contentfilter=medium";
+            var url = $"https://tenor.googleapis.com/v2/search?q={Uri.EscapeDataString(query)}&key={_apiKey}&client_key=telegram_bot&limit={limit}&media_filter=gif&contentfilter=medium";
             Console.WriteLine($"🔍 Tenor Search URL: {url}");
             
             var httpResponse = await _httpClient.GetAsync(url);
@@ -67,7 +67,7 @@ public class TenorService
     {
         try
         {
-            var url = $"https://g.tenor.com/v1/trending?key={_apiKey}&limit={limit}&media_filter=gif&contentfilter=medium";
+            var url = $"https://tenor.googleapis.com/v2/trending?key={_apiKey}&client_key=telegram_bot&limit={limit}&media_filter=gif&contentfilter=medium";
             Console.WriteLine($"📈 Tenor Trending URL: {url}");
             
             var httpResponse = await _httpClient.GetAsync(url);
