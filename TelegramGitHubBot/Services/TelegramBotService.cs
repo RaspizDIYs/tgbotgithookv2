@@ -155,6 +155,12 @@ public class TelegramBotService
             }
             else if (cleanCommand == "/glaistop")
             {
+                // Если активна игра, сначала останавливаем её
+                if (_gameStates.ContainsKey(chatId) && _gameStates[chatId].IsActive)
+                {
+                    await StopGameAsync(chatId);
+                }
+                
                 _geminiMode[chatId] = false;
                 await _botClient.SendTextMessageAsync(chatId, "🛑 Режим Gemini деактивирован. Возвращаюсь к обычным командам.", disableNotification: true);
                 return;
@@ -2448,6 +2454,9 @@ public class TelegramBotService
             await StopGameAsync(chatId);
         }
 
+        // Очищаем контекст AI для новой игры
+        _geminiManager.ClearContext(chatId);
+
         // Создаем новое состояние игры
         _gameStates[chatId] = new GameState
         {
@@ -2531,10 +2540,62 @@ Remember: ALL responses must be in Russian!";
             var aiResponse = await _geminiManager.GenerateResponseWithContextAsync(prompt, chatId);
             await _botClient.SendTextMessageAsync(chatId, aiResponse, disableNotification: true);
 
+            // Анализируем ответ AI и обновляем счетчики
+            if (answer != "start") // Не считаем стартовый запрос как вопрос
+            {
+                gameState.CurrentQuestion++;
+                
+                // Простая логика определения правильности ответа
+                var isCorrect = aiResponse.Contains("правильно") || aiResponse.Contains("верно") || 
+                               aiResponse.Contains("отлично") || aiResponse.Contains("молодец") ||
+                               aiResponse.Contains("да, это") || aiResponse.Contains("именно");
+                
+                if (isCorrect)
+                {
+                    gameState.CorrectAnswers++;
+                }
+                else
+                {
+                    gameState.WrongAnswers++;
+                }
+            }
+
             // Проверяем, завершилась ли игра
-            if (aiResponse.Contains("поздравляю") || aiResponse.Contains("статистика") || aiResponse.Contains("игра завершена"))
+            var shouldEndGame = false;
+            
+            // Проверяем количество вопросов (максимум 10)
+            if (gameState.CurrentQuestion >= 10)
+            {
+                shouldEndGame = true;
+            }
+            
+            // Проверяем количество неправильных ответов (максимум 2)
+            if (gameState.WrongAnswers >= 2)
+            {
+                shouldEndGame = true;
+            }
+            
+            // Проверяем ответ AI на завершение игры
+            if (aiResponse.Contains("поздравляю") || aiResponse.Contains("статистика") || 
+                aiResponse.Contains("игра завершена") || aiResponse.Contains("финал") ||
+                aiResponse.Contains("результат") || aiResponse.Contains("завершение"))
+            {
+                shouldEndGame = true;
+            }
+            
+            if (shouldEndGame)
             {
                 _gameStates[chatId].IsActive = false;
+                
+                // Отправляем финальную статистику
+                var finalStats = $"🎮 **Игра завершена!**\n\n" +
+                               $"📊 **Статистика:**\n" +
+                               $"✅ Правильных ответов: {gameState.CorrectAnswers}\n" +
+                               $"❌ Неправильных ответов: {gameState.WrongAnswers}\n" +
+                               $"📝 Всего вопросов: {gameState.CurrentQuestion}\n" +
+                               $"⏱️ Время игры: {DateTime.UtcNow - gameState.StartTime:mm\\:ss}";
+                
+                await _botClient.SendTextMessageAsync(chatId, finalStats, disableNotification: true);
                 
                 // Автоматически отключаем AI режим после окончания игры
                 if (_geminiMode.ContainsKey(chatId) && _geminiMode[chatId])
@@ -2542,6 +2603,8 @@ Remember: ALL responses must be in Russian!";
                     _geminiMode[chatId] = false;
                     await _botClient.SendTextMessageAsync(chatId, "🤖 **AI режим автоматически отключен после окончания игры!**", disableNotification: true);
                 }
+                
+                return; // Выходим из метода, чтобы не обрабатывать ответ дальше
             }
         }
         catch (Exception ex)
@@ -3728,6 +3791,9 @@ help - полный список команд";
         {
             await StopGameAsync(chatId);
         }
+
+        // Очищаем контекст AI для новой игры
+        _geminiManager.ClearContext(chatId);
 
         // Создаем новое состояние игры с уровнем сложности
         _gameStates[chatId] = new GameState
