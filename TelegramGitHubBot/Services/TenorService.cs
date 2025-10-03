@@ -24,11 +24,21 @@ public class TenorService
     {
         try
         {
-            var url = $"https://tenor.googleapis.com/v2/search?q={Uri.EscapeDataString(query)}&key={_apiKey}&limit={limit}&media_filter=gif";
+            var url = $"https://tenor.googleapis.com/v2/search?q={Uri.EscapeDataString(query)}&key={_apiKey}&limit={limit}&media_filter=gif&contentfilter=medium";
             Console.WriteLine($"🔍 Tenor Search URL: {url}");
             
-            var response = await _httpClient.GetStringAsync(url);
+            var httpResponse = await _httpClient.GetAsync(url);
+            if (!httpResponse.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"❌ HTTP Error: {httpResponse.StatusCode} - {httpResponse.ReasonPhrase}");
+                var errorContent = await httpResponse.Content.ReadAsStringAsync();
+                Console.WriteLine($"❌ Error Content: {errorContent}");
+                return new List<TenorGif>();
+            }
+            
+            var response = await httpResponse.Content.ReadAsStringAsync();
             Console.WriteLine($"📡 Tenor Response Length: {response.Length}");
+            Console.WriteLine($"📡 Tenor Response Preview: {response.Substring(0, Math.Min(500, response.Length))}...");
             
             var result = JsonSerializer.Deserialize<TenorResponse>(response);
             
@@ -56,8 +66,19 @@ public class TenorService
     {
         try
         {
-            var url = $"https://tenor.googleapis.com/v2/trending?key={_apiKey}&limit={limit}&media_filter=gif";
-            var response = await _httpClient.GetStringAsync(url);
+            var url = $"https://tenor.googleapis.com/v2/trending?key={_apiKey}&limit={limit}&media_filter=gif&contentfilter=medium";
+            Console.WriteLine($"📈 Tenor Trending URL: {url}");
+            
+            var httpResponse = await _httpClient.GetAsync(url);
+            if (!httpResponse.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"❌ HTTP Error: {httpResponse.StatusCode} - {httpResponse.ReasonPhrase}");
+                var errorContent = await httpResponse.Content.ReadAsStringAsync();
+                Console.WriteLine($"❌ Error Content: {errorContent}");
+                return new List<TenorGif>();
+            }
+            
+            var response = await httpResponse.Content.ReadAsStringAsync();
             var result = JsonSerializer.Deserialize<TenorResponse>(response);
             
             return result?.Results?.Select(g => new TenorGif
