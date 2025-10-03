@@ -322,8 +322,10 @@ public class TelegramBotService
         // Обычная обработка команд
 
         // Обработка GIF сообщений для добавления текста
-        if (message.Animation != null && _pendingGifTexts.ContainsKey(chatId))
+        if (message.Animation != null && _pendingGifTexts.ContainsKey(chatId) && _pendingGifTexts[chatId] == "waiting_for_gif")
         {
+            Console.WriteLine($"🎬 GIF received for chat {chatId}, fileId: {message.Animation.FileId}");
+            
             // Сохраняем GIF файл и ждем текст
             _pendingGifFiles[chatId] = message.Animation.FileId;
             _pendingGifTexts[chatId] = "waiting_for_text";
@@ -4127,6 +4129,7 @@ help - полный список команд";
         
         // Устанавливаем флаг ожидания GIF
         _pendingGifTexts[chatId] = "waiting_for_gif";
+        Console.WriteLine($"📝 GIF text command started for chat {chatId}, waiting for GIF");
     }
 
     private async Task ShowGifColorSelectionAsync(long chatId)
