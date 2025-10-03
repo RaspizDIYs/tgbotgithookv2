@@ -234,7 +234,7 @@ public class TelegramBotService
             else if (cleanCommand == "/webapp")
             {
                 var webAppUrl = Environment.GetEnvironmentVariable("WEBAPP_URL") ?? 
-                    "https://raspizdiys.github.io/tgbotgithookv2/webapp";
+                    "https://raspizdiys.github.io/tgbotgithookv2/webapp/";
                 
                 var webAppMessage = "🌐 **Веб-приложение бота**\n\n" +
                     "Откройте веб-интерфейс для управления ботом и просмотра статистики.";
