@@ -6,103 +6,359 @@
   <title>Мост диплинков Cursor</title>
   <link rel="icon" type="image/svg+xml" href="./image/cursor.svg?v=1" />
   <link rel="icon" type="image/png" href="./image/cursor-font.png?v=1" />
+  <!-- Material Icons -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
   <style>
-    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: #0f172a; }
-    .container { height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; }
-    .card { max-width: 720px; width: 100%; background: #ffffff; border: 1px solid #e6e6e6; border-radius: 12px; padding: 24px; box-shadow: 0 6px 24px rgba(0,0,0,0.20); }
-    .header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    :root {
+      --app-bg: #f4f3f2;
+      --app-text: #0f172a;
+      --app-secondary: #e9ecef;
+    }
+    :root[data-theme="dark"] {
+      --app-bg: #001B24;
+      --app-text: #f8fafc;
+      --app-secondary: #0b2a33;
+    }
+    html, body { 
+      height: 100%; 
+      margin: 0; 
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; 
+      background: var(--app-bg); 
+      color: var(--app-text);
+    }
+    .container { 
+      min-height: 100vh; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      padding: 24px; 
+      box-sizing: border-box; 
+    }
+    .card { 
+      max-width: 800px; 
+      width: 100%; 
+      background: var(--app-bg); 
+      border: 1px solid var(--app-secondary); 
+      border-radius: 12px; 
+      padding: 24px; 
+      box-shadow: 0 6px 24px rgba(0,0,0,0.20); 
+    }
+    .header { 
+      display: flex; 
+      align-items: center; 
+      justify-content: space-between;
+      gap: 12px; 
+      margin-bottom: 24px; 
+    }
     .logo { width: 40px; height: 40px; object-fit: contain; }
-    h1 { margin: 0; font-size: 20px; color: #0f172a; }
-    p { margin: 8px 0; color: #374151; }
-    code { background: #f6f8fa; padding: 2px 6px; border-radius: 6px; word-break: break-all; }
-    .hint { color: #6b7280; font-size: 14px; }
+    h1 { margin: 0; font-size: 24px; color: var(--app-text); }
+    p { margin: 8px 0; color: var(--app-text); opacity: 0.8; }
+    code { 
+      background: var(--app-secondary); 
+      padding: 8px 12px; 
+      border-radius: 6px; 
+      word-break: break-all; 
+      font-family: 'Courier New', monospace;
+      display: block;
+      margin: 8px 0;
+    }
+    .hint { color: var(--app-text); opacity: 0.6; font-size: 14px; }
     .error { color: #b00020; }
     .success { color: #0a7d35; }
-    .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-    .btn { appearance: none; border: 1px solid #e5e7eb; background: #111827; color: #ffffff; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; }
-    .btn:active { transform: translateY(1px); }
+    .btn { 
+      appearance: none; 
+      border: 1px solid var(--app-secondary); 
+      background: #2481cc; 
+      color: #ffffff; 
+      padding: 8px 16px; 
+      border-radius: 8px; 
+      cursor: pointer; 
+      font-size: 14px; 
+      transition: all 0.2s ease;
+    }
+    .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn-secondary { background: var(--app-secondary); color: var(--app-text); }
+    .btn-success { background: #00aa00; }
+    .btn-outline { background: transparent; border: 1px solid var(--app-text); color: var(--app-text); }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="card">
       <div class="header">
-        <img class="logo" src="./image/cursor-font.png" alt="Cursor" />
-        <h1>Открываем в Cursor…</h1>
+        <div>
+          <img class="logo" src="./image/cursor-font.png" alt="Cursor" />
+          <h1 class="d-inline-block ms-2">Cursor IDE Диплинки</h1>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <button id="themeToggle" class="btn btn-outline d-flex align-items-center gap-1" title="Переключить тему">
+            <span class="material-icons">dark_mode</span>
+            <span>Тема</span>
+          </button>
+          <a href="./webapp/" class="btn btn-secondary d-flex align-items-center gap-1">
+            <span class="material-icons">dashboard</span>
+            <span>WebApp</span>
+          </a>
+        </div>
       </div>
-      <p id="status" class="hint">Перенаправляем…</p>
-      <p class="hint">Если ничего не происходит, убедитесь, что Cursor установлен и диплинки включены.</p>
-      <div class="row">
-        <p class="hint" style="margin: 0;">Можно скопировать диплинк и вставить его вручную:</p>
-        <button id="copyBtn" class="btn">Копировать</button>
+
+      <div class="mb-4">
+        <label for="promptType" class="form-label">Тип диплинка:</label>
+        <select class="form-select" id="promptType">
+          <option value="prompt">Промпт (текст)</option>
+          <option value="file">Файл</option>
+        </select>
       </div>
-      <p><code id="deeplink">(генерация…)</code></p>
+
+      <div class="mb-4" id="promptSection">
+        <label for="promptText" class="form-label">Введите промпт:</label>
+        <textarea class="form-control" id="promptText" rows="4" placeholder="Введите ваш промпт для Cursor..."></textarea>
+      </div>
+
+      <div class="mb-4" id="fileSection" style="display: none;">
+        <div class="row">
+          <div class="col-md-6">
+            <label for="workspacePath" class="form-label">Путь к рабочей папке:</label>
+            <input type="text" class="form-control" id="workspacePath" placeholder="C:\project\myapp">
+          </div>
+          <div class="col-md-6">
+            <label for="filePath" class="form-label">Путь к файлу:</label>
+            <input type="text" class="form-control" id="filePath" placeholder="src/components/App.js">
+          </div>
+        </div>
+        <div class="row mt-3">
+          <div class="col-md-6">
+            <label for="lineNumber" class="form-label">Номер строки (опционально):</label>
+            <input type="number" class="form-control" id="lineNumber" placeholder="42">
+          </div>
+          <div class="col-md-6">
+            <label for="columnNumber" class="form-label">Номер колонки (опционально):</label>
+            <input type="number" class="form-control" id="columnNumber" placeholder="10">
+          </div>
+        </div>
+      </div>
+
+      <div class="d-grid mb-4">
+        <button class="btn btn-primary d-flex align-items-center justify-content-center gap-2" id="generateLink">
+          <span class="material-icons">link</span>
+          Сгенерировать диплинк
+        </button>
+      </div>
+
+      <div id="resultSection" style="display: none;">
+        <label class="form-label">Сгенерированный диплинк:</label>
+        <div class="input-group mb-3">
+          <input type="text" class="form-control" id="generatedLink" readonly>
+          <button class="btn btn-outline-secondary" id="copyLink" type="button">
+            <span class="material-icons">content_copy</span>
+            Копировать
+          </button>
+        </div>
+        <div class="d-flex gap-2">
+          <a href="#" id="openLink" class="btn btn-success d-flex align-items-center gap-1" target="_blank">
+            <span class="material-icons">open_in_new</span>
+            Открыть в Cursor
+          </a>
+          <button class="btn btn-secondary d-flex align-items-center gap-1" id="testLink">
+            <span class="material-icons">play_arrow</span>
+            Тест
+          </button>
+        </div>
+      </div>
+
+      <div class="alert alert-info mt-4">
+        <h6 class="alert-heading d-flex align-items-center gap-1">
+          <span class="material-icons">info</span>
+          Справка
+        </h6>
+        <p class="mb-2"><strong>Промпт:</strong> Открывает Cursor с готовым текстом для AI</p>
+        <p class="mb-0"><strong>Файл:</strong> Открывает конкретный файл в Cursor с возможностью указать строку и колонку</p>
+      </div>
     </div>
   </div>
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
   <script>
     (function() {
-      function getParam(name) {
-        const url = new URL(window.location.href);
-        return url.searchParams.get(name);
+      // Theme management
+      function initTheme() {
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        updateThemeIcon(savedTheme);
       }
 
+      function toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        updateThemeIcon(newTheme);
+      }
+
+      function updateThemeIcon(theme) {
+        const icon = document.querySelector('#themeToggle .material-icons');
+        icon.textContent = theme === 'dark' ? 'light_mode' : 'dark_mode';
+      }
+
+      // Cursor deeplink generator
       function buildCursorLink() {
-        const type = getParam('type');
+        const type = document.getElementById('promptType').value;
+        
         if (type === 'prompt') {
-          const text = getParam('text') || '';
-          // text is expected URL-encoded already; ensure safe encode
+          const text = document.getElementById('promptText').value.trim();
+          if (!text) {
+            showError('Введите промпт');
+            return null;
+          }
           const encoded = encodeURIComponent(text);
           return `cursor://anysphere.cursor-deeplink/prompt?text=${encoded}`;
         }
-
+        
         if (type === 'file') {
-          const workspace = (getParam('workspace') || '').replace(/\\/g, '/');
-          const path = (getParam('path') || '').replace(/^\/+/, '');
-          const line = getParam('line');
-          const column = getParam('column');
-          let url = `cursor://file/${workspace}/${path}`;
+          const workspace = document.getElementById('workspacePath').value.trim();
+          const path = document.getElementById('filePath').value.trim();
+          
+          if (!workspace || !path) {
+            showError('Заполните путь к рабочей папке и файлу');
+            return null;
+          }
+          
+          const cleanWorkspace = workspace.replace(/\\/g, '/');
+          const cleanPath = path.replace(/^\/+/, '');
+          const line = document.getElementById('lineNumber').value;
+          const column = document.getElementById('columnNumber').value;
+          
+          let url = `cursor://file/${cleanWorkspace}/${cleanPath}`;
           const qs = [];
           if (line) qs.push(`line=${encodeURIComponent(line)}`);
           if (column) qs.push(`column=${encodeURIComponent(column)}`);
           if (qs.length) url += `?${qs.join('&')}`;
+          
           return url;
         }
-
-        throw new Error('Unknown deeplink type');
+        
+        return null;
       }
 
-      try {
-        const link = buildCursorLink();
-        const deeplinkEl = document.getElementById('deeplink');
-        const statusEl = document.getElementById('status');
-        const copyBtn = document.getElementById('copyBtn');
+      function showError(message) {
+        // Simple error display - you can enhance this
+        alert(message);
+      }
 
-        deeplinkEl.textContent = link;
-        statusEl.textContent = 'Перенаправляем…';
+      function showSuccess(message) {
+        // Simple success display - you can enhance this
+        console.log(message);
+      }
 
-        // Copy logic
-        copyBtn.addEventListener('click', async () => {
-          try {
-            await navigator.clipboard.writeText(link);
-            const oldText = copyBtn.textContent;
-            copyBtn.textContent = 'Скопировано';
-            setTimeout(() => { copyBtn.textContent = oldText; }, 1500);
-          } catch (err) {
-            console.error('Copy failed', err);
-          }
-        });
+      function copyToClipboard(text) {
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(text).then(() => {
+            showSuccess('Диплинк скопирован в буфер обмена!');
+          });
+        } else {
+          // Fallback for older browsers
+          const textArea = document.createElement('textarea');
+          textArea.value = text;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          showSuccess('Диплинк скопирован!');
+        }
+      }
 
-        // Attempt redirect
-        window.location.href = link;
-        // Fallback: second attempt shortly after
-        setTimeout(() => {
+      function openInCursor(link) {
+        try {
           window.location.href = link;
-        }, 400);
-      } catch (e) {
-        document.getElementById('status').textContent = 'Failed to generate deeplink';
-        document.getElementById('status').classList.add('error');
-        console.error(e);
+          showSuccess('Открываем в Cursor...');
+        } catch (e) {
+          showError('Ошибка открытия диплинка');
+        }
       }
+
+      // Initialize app
+      document.addEventListener('DOMContentLoaded', () => {
+        initTheme();
+
+        const promptType = document.getElementById('promptType');
+        const promptSection = document.getElementById('promptSection');
+        const fileSection = document.getElementById('fileSection');
+        const generateBtn = document.getElementById('generateLink');
+        const copyBtn = document.getElementById('copyLink');
+        const openLink = document.getElementById('openLink');
+        const testLink = document.getElementById('testLink');
+        const generatedLink = document.getElementById('generatedLink');
+        const themeToggle = document.getElementById('themeToggle');
+
+        // Theme toggle
+        if (themeToggle) {
+          themeToggle.addEventListener('click', toggleTheme);
+        }
+
+        // Toggle sections based on type
+        if (promptType) {
+          promptType.addEventListener('change', () => {
+            const isPrompt = promptType.value === 'prompt';
+            promptSection.style.display = isPrompt ? 'block' : 'none';
+            fileSection.style.display = isPrompt ? 'none' : 'block';
+          });
+        }
+
+        // Generate link
+        if (generateBtn) {
+          generateBtn.addEventListener('click', () => {
+            const link = buildCursorLink();
+            if (link) {
+              generatedLink.value = link;
+              openLink.href = link;
+              document.getElementById('resultSection').style.display = 'block';
+              showSuccess('Диплинк сгенерирован!');
+            }
+          });
+        }
+
+        // Copy link
+        if (copyBtn) {
+          copyBtn.addEventListener('click', () => {
+            copyToClipboard(generatedLink.value);
+          });
+        }
+
+        // Test link
+        if (testLink) {
+          testLink.addEventListener('click', () => {
+            openInCursor(generatedLink.value);
+          });
+        }
+
+        // Check for URL parameters and auto-generate if present
+        const urlParams = new URLSearchParams(window.location.search);
+        const text = urlParams.get('text');
+        const workspace = urlParams.get('workspace');
+        const path = urlParams.get('path');
+        const line = urlParams.get('line');
+        const column = urlParams.get('column');
+
+        if (text) {
+          promptType.value = 'prompt';
+          document.getElementById('promptText').value = text;
+          promptSection.style.display = 'block';
+          fileSection.style.display = 'none';
+          generateBtn.click();
+        } else if (workspace && path) {
+          promptType.value = 'file';
+          document.getElementById('workspacePath').value = workspace;
+          document.getElementById('filePath').value = path;
+          if (line) document.getElementById('lineNumber').value = line;
+          if (column) document.getElementById('columnNumber').value = column;
+          promptSection.style.display = 'none';
+          fileSection.style.display = 'block';
+          generateBtn.click();
+        }
+      });
     })();
   </script>
 </body>
