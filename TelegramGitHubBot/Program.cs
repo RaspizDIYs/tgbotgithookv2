@@ -22,7 +22,7 @@ Console.WriteLine("=== Environment Variables Debug ===");
 var envVars = Environment.GetEnvironmentVariables();
 foreach (string key in envVars.Keys)
 {
-    if (key.Contains("TELEGRAM") || key.Contains("GITHUB") || key.Contains("ASPNETCORE") || key.Contains("GEMINI"))
+    if (key.Contains("TELEGRAM") || key.Contains("GITHUB") || key.Contains("ASPNETCORE") || key.Contains("GEMINI") || key.Contains("TENOR"))
     {
         var value = envVars[key]?.ToString() ?? "NULL";
         var displayValue = key.Contains("API_KEY") ? 
@@ -80,7 +80,9 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
                 var messageStatsService = new MessageStatsService();
                 var httpClient = new HttpClient();
                 var geminiManager = new GeminiManager(httpClient, builder.Configuration);
-                var telegramService = new TelegramBotService(botClient, githubService, achievementService, geminiManager, messageStatsService);
+                var tenorService = new TenorService(httpClient, builder.Configuration);
+                var gifTextEditorService = new GifTextEditorService(httpClient);
+                var telegramService = new TelegramBotService(botClient, githubService, achievementService, geminiManager, messageStatsService, tenorService, gifTextEditorService);
 
                 int? lastUpdateId = null;
 
@@ -267,6 +269,8 @@ else
 builder.Services.AddSingleton<AchievementService>();
 builder.Services.AddSingleton<MessageStatsService>();
 builder.Services.AddSingleton<WebhookHandlerService>();
+builder.Services.AddHttpClient<TenorService>();
+builder.Services.AddHttpClient<GifTextEditorService>();
 
 var app = builder.Build();
 

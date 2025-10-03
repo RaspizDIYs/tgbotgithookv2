@@ -34,14 +34,19 @@ public class TelegramBotService
     private readonly HashSet<string> _swearWords = new();
     private readonly Dictionary<long, bool> _geminiMode = new();
     private readonly Dictionary<long, GameState> _gameStates = new();
+    private readonly TenorService _tenorService;
+    private readonly GifTextEditorService _gifTextEditorService;
+    private readonly Dictionary<long, string> _pendingGifTexts = new(); // Для ожидания текста для GIF
 
-    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService)
+    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService, TenorService tenorService, GifTextEditorService gifTextEditorService)
     {
         _botClient = botClient;
         _gitHubService = gitHubService ?? throw new ArgumentNullException(nameof(gitHubService));
         _achievementService = achievementService ?? throw new ArgumentNullException(nameof(achievementService));
         _geminiManager = geminiManager ?? throw new ArgumentNullException(nameof(geminiManager));
         _messageStatsService = messageStatsService ?? throw new ArgumentNullException(nameof(messageStatsService));
+        _tenorService = tenorService ?? throw new ArgumentNullException(nameof(tenorService));
+        _gifTextEditorService = gifTextEditorService ?? throw new ArgumentNullException(nameof(gifTextEditorService));
 
         InitializeSwearWords();
         SetupDailySummaryTimer();
@@ -220,6 +225,31 @@ public class TelegramBotService
                 await TestGamePromptAsync(chatId);
                 return;
             }
+            else if (cleanCommand == "/gifsearch")
+            {
+                await HandleGifSearchAsync(chatId, text);
+                return;
+            }
+            else if (cleanCommand == "/gifrandom")
+            {
+                await HandleRandomGifAsync(chatId);
+                return;
+            }
+            else if (cleanCommand == "/gifemotion")
+            {
+                await HandleGifEmotionAsync(chatId, text);
+                return;
+            }
+            else if (cleanCommand == "/giftext")
+            {
+                await HandleGifTextCommandAsync(chatId);
+                return;
+            }
+            else if (cleanCommand == "/gifsettings")
+            {
+                await ShowGifSettingsAsync(chatId);
+                return;
+            }
         }
 
         // Если активна игра, обрабатываем ответ игрока
@@ -236,15 +266,8 @@ public class TelegramBotService
             {
                 var aiResponse = await _geminiManager.GenerateResponseWithContextAsync(text, chatId);
                 
-                // Если ответ содержит информацию о лимитах, отправляем с Markdown
-                if (aiResponse.Contains("**Статус**") || aiResponse.Contains("**Лимиты исчерпаны**") || aiResponse.Contains("**Превышен лимит**"))
-                {
-                    await _botClient.SendTextMessageAsync(chatId, aiResponse, parseMode: ParseMode.Markdown, disableNotification: true);
-                }
-                else
-                {
-                    await _botClient.SendTextMessageAsync(chatId, aiResponse, disableNotification: true);
-                }
+                // Проверяем, нужно ли отправить GIF вместе с ответом
+                await HandleAiResponseWithGifAsync(chatId, aiResponse, text);
             }
             catch (Exception ex)
             {
@@ -255,6 +278,14 @@ public class TelegramBotService
         }
 
         // Обычная обработка команд
+
+        // Обработка GIF сообщений для добавления текста
+        if (message.Animation != null && _pendingGifTexts.ContainsKey(chatId))
+        {
+            await HandleGifWithTextAsync(chatId, message.Animation.FileId, _pendingGifTexts[chatId]);
+            _pendingGifTexts.Remove(chatId);
+            return;
+        }
 
         // Обычные команды
         if (text.StartsWith("/"))
@@ -637,6 +668,13 @@ public class TelegramBotService
 ⏹️ /gamestop - Остановить игру
 🧪 /gametest - Тест игры
 
+🎬 *GIF - Работа с анимацией:*
+🔍 /gifsearch <запрос> - Поиск GIF
+🎲 /gifrandom - Случайный GIF
+😊 /gifemotion <эмоция> - GIF по эмоции
+📝 /giftext - Добавить текст на GIF
+⚙️ /gifsettings - Настройки GIF
+
 🖱️ *Cursor - Интеграция:*
 🔗 /deep <путь> - Диплинк для Cursor
   Примеры:
@@ -666,7 +704,11 @@ public class TelegramBotService
             },
             new[]
             {
+                InlineKeyboardButton.WithCallbackData("🎬 GIF", "menu:gif"),
                 InlineKeyboardButton.WithCallbackData("🖱️ Cursor", "menu:cursor"),
+            },
+            new[]
+            {
                 InlineKeyboardButton.WithCallbackData("⚙️ Настройки", "/settings"),
             },
             new[]
@@ -1077,6 +1119,7 @@ public class TelegramBotService
             "menu:stats",       // Stats меню
             "menu:gemini",      // Gemini AI меню
             "menu:games",       // Игры меню
+            "menu:gif",         // GIF меню
             "menu:cursor"       // Cursor меню
         };
 
@@ -1615,12 +1658,12 @@ public class TelegramBotService
                     catch (Exception ex)
                     {
                         Console.WriteLine($"⚠️ Failed to send Tenor GIF: {ex.Message}. Sending text fallback.");
-                await _botClient.SendTextMessageAsync(
-                    chatId: chatId,
-                    text: message,
-                    parseMode: ParseMode.Markdown,
-                    disableNotification: targetChatId.HasValue
-                );
+                        await _botClient.SendTextMessageAsync(
+                            chatId: chatId,
+                            text: message,
+                            parseMode: ParseMode.Markdown,
+                            disableNotification: targetChatId.HasValue
+                        );
                     }
                 }
                 else
@@ -1632,7 +1675,7 @@ public class TelegramBotService
                         parseMode: ParseMode.Markdown,
                         disableNotification: targetChatId.HasValue
                     );
-                var weekendSummaryType = targetChatId.HasValue ? "requested" : "automatic";
+                    var weekendSummaryType = targetChatId.HasValue ? "requested" : "automatic";
                     Console.WriteLine($"✅ {weekendSummaryType} weekend summary sent to chat {chatId} (text only)");
                 }
 
@@ -2538,7 +2581,15 @@ Process the answer:
 Remember: ALL responses must be in Russian!";
             
             var aiResponse = await _geminiManager.GenerateResponseWithContextAsync(prompt, chatId);
+            
+            // Отправляем ответ AI
             await _botClient.SendTextMessageAsync(chatId, aiResponse, disableNotification: true);
+            
+            // Если это игра с мемами, добавляем GIF
+            if (gameState.GameType == "meme" && answer != "start")
+            {
+                await AddGifToMemeGameAsync(chatId, aiResponse, gameState);
+            }
 
             // Анализируем ответ AI и обновляем счетчики
             if (answer != "start") // Не считаем стартовый запрос как вопрос
@@ -2857,6 +2908,9 @@ Start with the first easy question. Remember: everything must be in Russian!";
                     break;
                 case "games":
                     await ShowGamesMenuAsync(chatId, messageId);
+                    break;
+                case "gif":
+                    await ShowGifMenuAsync(chatId, messageId);
                     break;
                 case "cursor":
                     await ShowCursorMenuAsync(chatId, messageId);
@@ -3783,6 +3837,371 @@ help - полный список команд";
             Console.WriteLine($"❌ Error handling difficulty selection: {ex.Message}");
         }
     }
+
+    #region GIF Methods
+
+    private async Task ShowGifMenuAsync(long chatId, int messageId)
+    {
+        var message = @"🎬 *GIF меню*
+
+Выберите действие:";
+
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🔍 Поиск GIF", "/gifsearch"),
+                InlineKeyboardButton.WithCallbackData("🎲 Случайный", "/gifrandom"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("😊 По эмоции", "/gifemotion"),
+                InlineKeyboardButton.WithCallbackData("📝 Добавить текст", "/giftext"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⚙️ Настройки", "/gifsettings"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help"),
+            }
+        });
+
+        await _botClient.EditMessageTextAsync(chatId, messageId, message, parseMode: ParseMode.Markdown, replyMarkup: keyboard);
+    }
+
+    private async Task HandleGifSearchAsync(long chatId, string text)
+    {
+        var query = text.Replace("/gifsearch", "").Trim();
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            await _botClient.SendTextMessageAsync(chatId, "🔍 **Поиск GIF**\n\nВведите запрос для поиска GIF:\n`/gifsearch котики`", parseMode: ParseMode.Markdown, disableNotification: true);
+            return;
+        }
+
+        await _botClient.SendTextMessageAsync(chatId, $"🔍 Ищу GIF по запросу: **{query}**...", parseMode: ParseMode.Markdown, disableNotification: true);
+
+        try
+        {
+            var gifs = await _tenorService.SearchGifsAsync(query, 5);
+            if (gifs.Count == 0)
+            {
+                await _botClient.SendTextMessageAsync(chatId, "❌ GIF не найдены по запросу: " + query, disableNotification: true);
+                return;
+            }
+
+            foreach (var gif in gifs.Take(3))
+            {
+                try
+                {
+                    await _botClient.SendAnimationAsync(chatId, InputFile.FromUri(gif.Url), caption: $"🎬 {gif.Title}", disableNotification: true);
+                    await Task.Delay(500); // Небольшая задержка между GIF
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"❌ Error sending GIF: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка поиска GIF: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleRandomGifAsync(long chatId)
+    {
+        await _botClient.SendTextMessageAsync(chatId, "🎲 Ищу случайный GIF...", disableNotification: true);
+
+        try
+        {
+            var gif = await _tenorService.GetRandomGifAsync("memes");
+            if (gif == null)
+            {
+                await _botClient.SendTextMessageAsync(chatId, "❌ Не удалось найти случайный GIF", disableNotification: true);
+                return;
+            }
+
+            await _botClient.SendAnimationAsync(chatId, InputFile.FromUri(gif.Url), caption: $"🎲 Случайный GIF: {gif.Title}", disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения случайного GIF: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleGifEmotionAsync(long chatId, string text)
+    {
+        var emotion = text.Replace("/gifemotion", "").Trim();
+        if (string.IsNullOrWhiteSpace(emotion))
+        {
+            var message = @"😊 **GIF по эмоциям**
+
+Доступные эмоции:
+• злость, злой
+• счастье, счастливый  
+• грусть, грустный
+• удивление, удивленный
+• страх, испуг
+• любовь, любовный
+• смех, смешной
+
+Пример: `/gifemotion счастье`";
+
+            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
+            return;
+        }
+
+        await _botClient.SendTextMessageAsync(chatId, $"😊 Ищу GIF для эмоции: **{emotion}**...", parseMode: ParseMode.Markdown, disableNotification: true);
+
+        try
+        {
+            var gifs = await _tenorService.GetGifsByEmotionAsync(emotion);
+            if (gifs.Count == 0)
+            {
+                await _botClient.SendTextMessageAsync(chatId, "❌ GIF не найдены для эмоции: " + emotion, disableNotification: true);
+                return;
+            }
+
+            foreach (var gif in gifs.Take(2))
+            {
+                try
+                {
+                    await _botClient.SendAnimationAsync(chatId, InputFile.FromUri(gif.Url), caption: $"😊 {emotion}: {gif.Title}", disableNotification: true);
+                    await Task.Delay(500);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"❌ Error sending emotion GIF: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка поиска GIF по эмоции: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleGifTextCommandAsync(long chatId)
+    {
+        var message = @"📝 **Добавление текста на GIF**
+
+1. Отправьте GIF файл в этот чат
+2. Я добавлю на него текст
+
+Настройки текста:
+• Цвет: белый (по умолчанию)
+• Позиция: снизу (по умолчанию)
+
+Отправьте GIF для обработки...";
+
+        await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
+        
+        // Устанавливаем флаг ожидания GIF
+        _pendingGifTexts[chatId] = "default";
+    }
+
+    private async Task HandleGifWithTextAsync(long chatId, string fileId, string textSettings)
+    {
+        try
+        {
+            await _botClient.SendTextMessageAsync(chatId, "📝 Обрабатываю GIF...", disableNotification: true);
+
+            // Получаем файл GIF
+            var file = await _botClient.GetFileAsync(fileId);
+            var token = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN") ?? "";
+            var fileUrl = $"https://api.telegram.org/file/bot{token}/{file.FilePath}";
+
+            // Добавляем текст на GIF
+            var editedGifBytes = await _gifTextEditorService.AddTextToGifAsync(fileUrl, "Текст на GIF", TextPosition.Bottom, System.Drawing.Color.White);
+            
+            if (editedGifBytes == null)
+            {
+                await _botClient.SendTextMessageAsync(chatId, "❌ Ошибка обработки GIF", disableNotification: true);
+                return;
+            }
+
+            // Отправляем обработанный GIF
+            using var stream = new MemoryStream(editedGifBytes);
+            await _botClient.SendAnimationAsync(chatId, InputFile.FromStream(stream, "edited.gif"), caption: "📝 GIF с добавленным текстом", disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка обработки GIF: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task ShowGifSettingsAsync(long chatId)
+    {
+        var message = @"⚙️ *Настройки GIF*
+
+🔧 **Доступные настройки:**
+• Цвет текста: белый
+• Позиция текста: снизу
+• Качество: высокое
+
+📝 **Команды:**
+• `/giftext` - Добавить текст на GIF
+• `/gifsearch <запрос>` - Поиск GIF
+• `/gifemotion <эмоция>` - GIF по эмоции
+• `/gifrandom` - Случайный GIF";
+
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("📝 Добавить текст", "/giftext"),
+                InlineKeyboardButton.WithCallbackData("🔍 Поиск", "/gifsearch"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "menu:gif"),
+            }
+        });
+
+        await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, replyMarkup: keyboard, disableNotification: true);
+    }
+
+    private async Task HandleAiResponseWithGifAsync(long chatId, string aiResponse, string userMessage)
+    {
+        try
+        {
+            // Если ответ содержит информацию о лимитах, отправляем с Markdown
+            if (aiResponse.Contains("**Статус**") || aiResponse.Contains("**Лимиты исчерпаны**") || aiResponse.Contains("**Превышен лимит**"))
+            {
+                await _botClient.SendTextMessageAsync(chatId, aiResponse, parseMode: ParseMode.Markdown, disableNotification: true);
+                return;
+            }
+
+            // Отправляем текстовый ответ
+            await _botClient.SendTextMessageAsync(chatId, aiResponse, disableNotification: true);
+
+            // Проверяем, нужно ли добавить GIF к ответу
+            var shouldAddGif = ShouldAddGifToResponse(aiResponse, userMessage);
+            if (shouldAddGif)
+            {
+                await AddEmotionalGifToResponseAsync(chatId, aiResponse, userMessage);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error handling AI response with GIF: {ex.Message}");
+            // Отправляем хотя бы текстовый ответ
+            await _botClient.SendTextMessageAsync(chatId, aiResponse, disableNotification: true);
+        }
+    }
+
+    private bool ShouldAddGifToResponse(string aiResponse, string userMessage)
+    {
+        // Добавляем GIF если:
+        // 1. Ответ эмоциональный
+        // 2. Пользователь просил мем или GIF
+        // 3. Ответ содержит эмоциональные слова
+        
+        var emotionalWords = new[] { "смешно", "весело", "грустно", "зло", "радость", "удивительно", "страшно", "любовь", "мем", "gif", "анимация" };
+        var userWords = userMessage.ToLower();
+        var responseWords = aiResponse.ToLower();
+
+        return emotionalWords.Any(word => userWords.Contains(word) || responseWords.Contains(word)) ||
+               userWords.Contains("мем") || userWords.Contains("gif") || userWords.Contains("анимация") ||
+               responseWords.Contains("😄") || responseWords.Contains("😂") || responseWords.Contains("😢") ||
+               responseWords.Contains("😡") || responseWords.Contains("😍") || responseWords.Contains("🤔");
+    }
+
+    private async Task AddEmotionalGifToResponseAsync(long chatId, string aiResponse, string userMessage)
+    {
+        try
+        {
+            // Определяем эмоцию по ответу
+            var emotion = DetermineEmotionFromResponse(aiResponse);
+            
+            // Получаем подходящий GIF
+            var gifs = await _tenorService.GetGifsByEmotionAsync(emotion);
+            if (gifs.Count > 0)
+            {
+                var randomGif = gifs[new Random().Next(gifs.Count)];
+                await _botClient.SendAnimationAsync(chatId, InputFile.FromUri(randomGif.Url), 
+                    caption: $"🎬 {emotion}: {randomGif.Title}", disableNotification: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error adding emotional GIF: {ex.Message}");
+        }
+    }
+
+    private string DetermineEmotionFromResponse(string response)
+    {
+        var lowerResponse = response.ToLower();
+        
+        if (lowerResponse.Contains("смешно") || lowerResponse.Contains("весело") || lowerResponse.Contains("😂") || lowerResponse.Contains("😄"))
+            return "смех";
+        if (lowerResponse.Contains("грустно") || lowerResponse.Contains("печально") || lowerResponse.Contains("😢"))
+            return "грусть";
+        if (lowerResponse.Contains("зло") || lowerResponse.Contains("злой") || lowerResponse.Contains("😡"))
+            return "злость";
+        if (lowerResponse.Contains("радость") || lowerResponse.Contains("счастье") || lowerResponse.Contains("😍"))
+            return "счастье";
+        if (lowerResponse.Contains("удивительно") || lowerResponse.Contains("🤔") || lowerResponse.Contains("?"))
+            return "удивление";
+        if (lowerResponse.Contains("страшно") || lowerResponse.Contains("боюсь"))
+            return "страх";
+        if (lowerResponse.Contains("любовь") || lowerResponse.Contains("❤️"))
+            return "любовь";
+            
+        return "мемы"; // По умолчанию
+    }
+
+    private async Task AddGifToMemeGameAsync(long chatId, string aiResponse, GameState gameState)
+    {
+        try
+        {
+            // Определяем тип GIF на основе ответа и состояния игры
+            string gifCategory = DetermineGifCategoryForMemeGame(aiResponse, gameState);
+            
+            // Получаем подходящий GIF
+            var gifs = await _tenorService.SearchGifsAsync(gifCategory, 3);
+            if (gifs.Count > 0)
+            {
+                var randomGif = gifs[new Random().Next(gifs.Count)];
+                await _botClient.SendAnimationAsync(chatId, InputFile.FromUri(randomGif.Url), 
+                    caption: $"🎬 Мем-игра: {randomGif.Title}", disableNotification: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error adding GIF to meme game: {ex.Message}");
+        }
+    }
+
+    private string DetermineGifCategoryForMemeGame(string aiResponse, GameState gameState)
+    {
+        var lowerResponse = aiResponse.ToLower();
+        
+        // Если правильный ответ
+        if (lowerResponse.Contains("правильно") || lowerResponse.Contains("верно") || lowerResponse.Contains("отлично"))
+        {
+            return "celebration success victory";
+        }
+        
+        // Если неправильный ответ
+        if (lowerResponse.Contains("неправильно") || lowerResponse.Contains("неверно") || lowerResponse.Contains("ошибка"))
+        {
+            return "fail mistake wrong";
+        }
+        
+        // Если игра завершена
+        if (lowerResponse.Contains("поздравляю") || lowerResponse.Contains("статистика") || lowerResponse.Contains("финал"))
+        {
+            return "congratulations finish game over";
+        }
+        
+        // По умолчанию - мемы
+        return "memes funny";
+    }
+
+    #endregion
 
     private async Task StartGameWithDifficultyAsync(long chatId, string gameType, string difficulty)
     {
