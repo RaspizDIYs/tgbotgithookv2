@@ -633,7 +633,7 @@ public class TelegramBotService
 
     private async Task SendMessageWithBackButtonAsync(long chatId, string message, string? backCommand = null, ParseMode parseMode = ParseMode.Markdown)
     {
-        var actualBackCommand = backCommand ?? PeekNavigation(chatId);
+        var actualBackCommand = backCommand ?? PeekNavigation(chatId) ?? "/help";
         var inlineKeyboard = new InlineKeyboardMarkup(new[]
         {
             new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", actualBackCommand) }
@@ -644,7 +644,7 @@ public class TelegramBotService
 
     private async Task EditMessageWithBackButtonAsync(long chatId, int messageId, string message, string? backCommand = null, ParseMode parseMode = ParseMode.Markdown)
     {
-        var actualBackCommand = backCommand ?? PeekNavigation(chatId);
+        var actualBackCommand = backCommand ?? PeekNavigation(chatId) ?? "/help";
         var inlineKeyboard = new InlineKeyboardMarkup(new[]
         {
             new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", actualBackCommand) }
