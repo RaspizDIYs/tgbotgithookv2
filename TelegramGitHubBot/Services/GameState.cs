@@ -61,8 +61,6 @@ B) [option 2]
 C) [option 3]
 D) [option 4]
 
-Правильный ответ: [letter] - [answer text]
-
 CRITICAL: Do NOT include the correct answer in the question text itself!
 
 Start with the first question. Remember: everything must be in Russian!";
@@ -99,8 +97,6 @@ B) [option 2]
 C) [option 3]
 D) [option 4]
 
-Правильный ответ: [letter] - [answer text]
-
 CRITICAL: Do NOT include the correct answer in the question text itself!
 
 Start with the first question. Remember: everything must be in Russian!";
@@ -136,8 +132,6 @@ A) [option 1]
 B) [option 2] 
 C) [option 3]
 D) [option 4]
-
-Правильный ответ: [letter] - [answer text]
 
 CRITICAL: Do NOT include the correct answer in the question text itself!
 

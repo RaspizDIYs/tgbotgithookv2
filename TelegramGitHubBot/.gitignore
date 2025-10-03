@@ -20,6 +20,9 @@ appsettings.*.json
 *.swp
 *.swo
 
+# Cursor settings
+cursor-settings.json
+
 # OS
 .DS_Store
 Thumbs.db

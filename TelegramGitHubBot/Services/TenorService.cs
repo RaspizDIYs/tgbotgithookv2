@@ -7,6 +7,7 @@ public class TenorService
 {
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
+    private static readonly Random _random = new Random();
 
     public TenorService(HttpClient httpClient, IConfiguration configuration)
     {
@@ -105,8 +106,7 @@ public class TenorService
             var gifs = await SearchGifsAsync(category, 50);
             if (gifs.Count == 0) return null;
             
-            var random = new Random();
-            return gifs[random.Next(gifs.Count)];
+            return gifs[_random.Next(gifs.Count)];
         }
         catch (Exception ex)
         {
@@ -126,6 +126,11 @@ public class TenorService
             "страх" or "испуг" or "scared" => new[] { "scared", "fear", "terrified", "afraid" },
             "любовь" or "любовный" or "love" => new[] { "love", "romance", "heart", "kiss" },
             "смех" or "смешной" or "laugh" => new[] { "laugh", "funny", "comedy", "hilarious" },
+            "шутка" or "joke" => new[] { "joke", "funny", "comedy", "humor" },
+            "работа" or "work" => new[] { "work", "office", "business", "professional" },
+            "оффтоп" or "offtopic" => new[] { "random", "funny", "meme", "reaction" },
+            "фол" or "follow" or "support" => new[] { "support", "help", "teamwork", "friendship" },
+            "программирование" or "programming" or "код" or "code" => new[] { "programming", "coding", "computer", "tech" },
             _ => new[] { emotion, "meme", "reaction" }
         };
 

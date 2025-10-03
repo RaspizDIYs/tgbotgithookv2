@@ -19,7 +19,7 @@ public class NotificationSettings
 
 public class GifTextSettings
 {
-    public System.Drawing.Color TextColor { get; set; } = System.Drawing.Color.FromName("White");
+    public string TextColor { get; set; } = "white";
     public TextPosition Position { get; set; } = TextPosition.Bottom;
     
     public static GifTextSettings Default => new();
@@ -48,6 +48,9 @@ public class TelegramBotService
     private readonly Dictionary<long, string> _pendingGifFiles = new(); // Для хранения GIF файлов
     private readonly Dictionary<long, GifTextSettings> _gifTextSettings = new(); // Настройки текста для GIF
     private readonly ChatActivityTracker _chatActivityTracker;
+    private static readonly Random _random = new Random();
+    private readonly Dictionary<long, string> _lastMenu = new(); // Для отслеживания предыдущего меню
+    private readonly Dictionary<long, Stack<string>> _navigationStack = new(); // Стек навигации для каждого чата
 
     public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService, TenorService tenorService, GifTextEditorService gifTextEditorService)
     {
@@ -174,7 +177,7 @@ public class TelegramBotService
             if (cleanCommand == "/glaistart")
             {
                 _geminiMode[chatId] = true;
-                await _botClient.SendTextMessageAsync(chatId, "🤖 Режим Gemini активирован! Теперь я буду отвечать через AI модель.", disableNotification: true);
+                await SendMessageWithBackButtonAsync(chatId, "🤖 **Режим Gemini активирован!**\n\nТеперь я буду отвечать через AI модель.");
                 return;
             }
             else if (cleanCommand == "/glaistop")
@@ -186,32 +189,32 @@ public class TelegramBotService
                 }
                 
                 _geminiMode[chatId] = false;
-                await _botClient.SendTextMessageAsync(chatId, "🛑 Режим Gemini деактивирован. Возвращаюсь к обычным командам.", disableNotification: true);
+                await SendMessageWithBackButtonAsync(chatId, "🛑 **Режим Gemini деактивирован.**\n\nВозвращаюсь к обычным командам.");
                 return;
             }
             else if (cleanCommand == "/glaistats")
             {
                 var stats = _geminiManager.GetAllAgentsStatus();
-                await _botClient.SendTextMessageAsync(chatId, stats, parseMode: ParseMode.Markdown, disableNotification: true);
+                await SendMessageWithBackButtonAsync(chatId, stats);
                 return;
             }
             else if (cleanCommand == "/glaicurrent")
             {
                 var stats = _geminiManager.GetCurrentAgentStatus();
-                await _botClient.SendTextMessageAsync(chatId, stats, parseMode: ParseMode.Markdown, disableNotification: true);
+                await SendMessageWithBackButtonAsync(chatId, stats);
                 return;
             }
             else if (cleanCommand == "/glaiswitch")
             {
                 _geminiManager.SwitchToNextAgent();
                 var stats = _geminiManager.GetCurrentAgentStatus();
-                await _botClient.SendTextMessageAsync(chatId, $"🔄 **Переключение агента**\n\n{stats}", parseMode: ParseMode.Markdown, disableNotification: true);
+                await SendMessageWithBackButtonAsync(chatId, $"🔄 **Переключение агента**\n\n{stats}");
                 return;
             }
             else if (cleanCommand == "/glaiclear")
             {
                 _geminiManager.ClearContext(chatId);
-                await _botClient.SendTextMessageAsync(chatId, "🧹 **Контекст разговора очищен!**", disableNotification: true);
+                await SendMessageWithBackButtonAsync(chatId, "🧹 **Контекст разговора очищен!**");
                 return;
             }
             else if (cleanCommand == "/game")
@@ -366,8 +369,10 @@ public class TelegramBotService
                 DateTime.UtcNow);
         }
 
-        // Игнорируем остальные сообщения
+        // В обычном режиме просто игнорируем сообщения (только команды работают)
+        // Для общения с AI используйте /glaistart
     }
+
 
     private static bool ContainsProfanity(string text)
     {
@@ -599,6 +604,55 @@ public class TelegramBotService
         }
     }
 
+    private void PushNavigation(long chatId, string command)
+    {
+        if (!_navigationStack.ContainsKey(chatId))
+        {
+            _navigationStack[chatId] = new Stack<string>();
+        }
+        _navigationStack[chatId].Push(command);
+    }
+
+    private string? PopNavigation(long chatId)
+    {
+        if (!_navigationStack.ContainsKey(chatId) || _navigationStack[chatId].Count == 0)
+        {
+            return null;
+        }
+        return _navigationStack[chatId].Pop();
+    }
+
+    private string? PeekNavigation(long chatId)
+    {
+        if (!_navigationStack.ContainsKey(chatId) || _navigationStack[chatId].Count == 0)
+        {
+            return "/help"; // По умолчанию возвращаемся в help
+        }
+        return _navigationStack[chatId].Peek();
+    }
+
+    private async Task SendMessageWithBackButtonAsync(long chatId, string message, string? backCommand = null, ParseMode parseMode = ParseMode.Markdown)
+    {
+        var actualBackCommand = backCommand ?? PeekNavigation(chatId);
+        var inlineKeyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", actualBackCommand) }
+        });
+
+        await _botClient.SendTextMessageAsync(chatId, message, parseMode: parseMode, replyMarkup: inlineKeyboard, disableNotification: true);
+    }
+
+    private async Task EditMessageWithBackButtonAsync(long chatId, int messageId, string message, string? backCommand = null, ParseMode parseMode = ParseMode.Markdown)
+    {
+        var actualBackCommand = backCommand ?? PeekNavigation(chatId);
+        var inlineKeyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", actualBackCommand) }
+        });
+
+        await _botClient.EditMessageTextAsync(chatId, messageId, message, parseMode: parseMode, replyMarkup: inlineKeyboard);
+    }
+
     private async Task SendWelcomeMessageAsync(long chatId)
     {
         var message = @"🤖 *GitHub Monitor Bot*
@@ -676,7 +730,7 @@ public class TelegramBotService
             },
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/start")
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад")
             }
         });
 
@@ -892,7 +946,7 @@ public class TelegramBotService
             // Кэшируем результат
             _achievementService.CacheStats(cacheKey, status, "status");
             
-            await _botClient.SendTextMessageAsync(chatId, status, parseMode: ParseMode.Markdown, disableNotification: true);
+            await SendMessageWithBackButtonAsync(chatId, status);
         }
         catch (Exception ex)
         {
@@ -930,7 +984,7 @@ public class TelegramBotService
             // Кэшируем результат
             _achievementService.CacheStats(cacheKey, commits, "commits");
             
-            await _botClient.SendTextMessageAsync(chatId, commits, parseMode: ParseMode.Markdown, disableNotification: true);
+            await SendMessageWithBackButtonAsync(chatId, commits);
         }
         catch (Exception ex)
         {
@@ -943,7 +997,7 @@ public class TelegramBotService
         try
         {
             var branches = await _gitHubService.GetBranchesAsync();
-            await _botClient.SendTextMessageAsync(chatId, branches, parseMode: ParseMode.Markdown, disableNotification: true);
+            await SendMessageWithBackButtonAsync(chatId, branches);
         }
         catch (Exception ex)
         {
@@ -956,7 +1010,7 @@ public class TelegramBotService
         try
         {
             var prs = await _gitHubService.GetPullRequestsAsync();
-            await _botClient.SendTextMessageAsync(chatId, prs, parseMode: ParseMode.Markdown, disableNotification: true);
+            await SendMessageWithBackButtonAsync(chatId, prs);
         }
         catch (Exception ex)
         {
@@ -1051,7 +1105,14 @@ public class TelegramBotService
             else if (data.StartsWith("menu:"))
             {
                 Console.WriteLine($"📂 Processing submenu: {data}");
+                
+                // Добавляем команду в стек навигации
+                PushNavigation(chatId, data);
+                
                 await HandleSubmenuAsync(chatId, messageId, data);
+                
+                // Удаляем предыдущее сообщение
+                await DeleteMessageAsync(chatId, messageId);
             }
             else if (data.StartsWith("difficulty:"))
             {
@@ -1077,11 +1138,32 @@ public class TelegramBotService
             else
             {
                 Console.WriteLine("📝 Processing regular command");
-                // Обрабатываем обычную команду из callback data
-                await HandleCommandAsync(chatId, data, callbackQuery.From?.Username);
-                // Проверяем, нужно ли удалить предыдущее сообщение ПОСЛЕ отправки нового
-                if (ShouldDeletePreviousMessage(data))
+                
+                // Если это кнопка "Назад", возвращаемся к предыдущему меню
+                if (data == "⬅️ Назад" || data.Contains("Назад"))
                 {
+                    var previousCommand = PopNavigation(chatId);
+                    if (previousCommand != null)
+                    {
+                        await HandleCommandAsync(chatId, previousCommand, callbackQuery.From?.Username);
+                        await DeleteMessageAsync(chatId, messageId);
+                    }
+                    else
+                    {
+                        // Если нет предыдущего меню, возвращаемся в help
+                        await SendHelpMessageAsync(chatId);
+                        await DeleteMessageAsync(chatId, messageId);
+                    }
+                }
+                else
+                {
+                    // Добавляем команду в стек навигации
+                    PushNavigation(chatId, data);
+                    
+                    // Обрабатываем команду из callback data
+                    await HandleCommandAsync(chatId, data, callbackQuery.From?.Username);
+                    
+                    // Удаляем предыдущее сообщение
                     await DeleteMessageAsync(chatId, messageId);
                 }
             }
@@ -1119,7 +1201,7 @@ public class TelegramBotService
                 InlineKeyboardButton.WithCallbackData("⬅️", $"achv:prev:{idx}"),
                 InlineKeyboardButton.WithCallbackData("➡️", $"achv:next:{idx}")
             },
-            new [] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+            new [] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") }
         });
 
         try
@@ -1206,7 +1288,19 @@ public class TelegramBotService
             "menu:gemini",      // Gemini AI меню
             "menu:games",       // Игры меню
             "menu:gif",         // GIF меню
-            "menu:cursor"       // Cursor меню
+            "menu:cursor",      // Cursor меню
+            // GIF команды
+            "/gifsearch",       // Поиск GIF
+            "/gifrandom",       // Случайный GIF
+            "/giftext",         // Добавить текст на GIF
+            "/gifsettings",     // Настройки GIF
+            // Gemini команды
+            "/glaistart",       // Включить AI
+            "/glaistop",        // Выключить AI
+            "/glaistats",       // Статус агентов
+            "/glaicurrent",     // Текущий агент
+            "/glaiswitch",      // Переключить агента
+            "/glaiclear"        // Очистить контекст
         };
 
         return deleteCommands.Contains(callbackData);
@@ -1458,7 +1552,7 @@ public class TelegramBotService
                 },
                 new[]
                 {
-                    InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/start")
+                    InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад")
                 }
             });
 
@@ -1497,7 +1591,7 @@ public class TelegramBotService
         var stats = _messageStatsService.GetChatStats(chatId);
         if (stats == null)
         {
-            await _botClient.SendTextMessageAsync(chatId, "Статистика пока пуста.", parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true);
+            await SendMessageWithBackButtonAsync(chatId, "Статистика пока пуста.");
             return;
         }
 
@@ -1517,7 +1611,7 @@ public class TelegramBotService
         }
 
         var text = string.Join("\n", lines);
-        await _botClient.SendTextMessageAsync(chatId, text, parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true);
+        await SendMessageWithBackButtonAsync(chatId, text);
     }
 
     public bool ShouldSendNotification(long chatId, string notificationType)
@@ -1869,7 +1963,7 @@ public class TelegramBotService
             }
 
             // Кнопка возврата
-            buttons.Add(new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") });
+            buttons.Add(new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") });
 
             var keyboard = new InlineKeyboardMarkup(buttons);
 
@@ -1901,7 +1995,7 @@ public class TelegramBotService
 
             var keyboard = new InlineKeyboardMarkup(new[]
             {
-                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") }
             });
 
             await _botClient.SendTextMessageAsync(
@@ -1930,7 +2024,7 @@ public class TelegramBotService
             {
             var keyboard = new InlineKeyboardMarkup(new[]
                 {
-                    new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+                    new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") }
                 });
 
                 await _botClient.SendTextMessageAsync(
@@ -1950,7 +2044,7 @@ public class TelegramBotService
             {
                 var keyboard = new InlineKeyboardMarkup(new[]
                 {
-                    new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+                    new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") }
                 });
 
                 await _botClient.SendTextMessageAsync(
@@ -1970,7 +2064,7 @@ public class TelegramBotService
             
             var keyboard2 = new InlineKeyboardMarkup(new[]
             {
-                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") }
             });
 
             await _botClient.SendTextMessageAsync(
@@ -1995,7 +2089,7 @@ public class TelegramBotService
             var keyboard = new InlineKeyboardMarkup(new[]
             {
                 new[] { InlineKeyboardButton.WithCallbackData("📋 Детали коммита", $"cd:{commitSha}:goodluckv2:details") },
-                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") }
             });
 
             await _botClient.SendTextMessageAsync(
@@ -2054,7 +2148,7 @@ public class TelegramBotService
             var keyboard = new InlineKeyboardMarkup(new[]
             {
                 new[] { InlineKeyboardButton.WithCallbackData("👥 Активные авторы", "/authors") },
-                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") }
             });
 
             await _botClient.EditMessageTextAsync(
@@ -2091,7 +2185,7 @@ public class TelegramBotService
                 buttons.Add(new[] { InlineKeyboardButton.WithCallbackData($"📅 {weekText}", $"week_stats:{i}") });
             }
 
-            buttons.Add(new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") });
+            buttons.Add(new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") });
 
             var keyboard = new InlineKeyboardMarkup(buttons);
 
@@ -2117,7 +2211,7 @@ public class TelegramBotService
             
             var keyboard = new InlineKeyboardMarkup(new[]
             {
-                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") }
             });
 
             await _botClient.SendTextMessageAsync(
@@ -2142,7 +2236,7 @@ public class TelegramBotService
             
             var keyboard = new InlineKeyboardMarkup(new[]
             {
-                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") }
             });
 
             await _botClient.SendTextMessageAsync(
@@ -2176,7 +2270,7 @@ public class TelegramBotService
             var keyboard = new InlineKeyboardMarkup(new[]
             {
                 new[] { InlineKeyboardButton.WithCallbackData("📊 Выбрать другую неделю", "/weekstats") },
-                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help") }
+                new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") }
             });
 
             await _botClient.SendTextMessageAsync(
@@ -2663,7 +2757,7 @@ Process the answer:
 1. If correct - start response with ""✅ ПРАВИЛЬНО!"" and give next question
 2. If wrong - start response with ""❌ НЕПРАВИЛЬНО!"" and say correct answer, then give next question  
 3. If this was the last (10th) question - finish game with ""🎉 ИГРА ЗАВЕРШЕНА!""
-4. Follow format: Вопрос: [text] A) [option] B) [option] C) [option] D) [option] Правильный ответ: [letter] - [text]
+4. Follow format: Вопрос: [text] A) [option] B) [option] C) [option] D) [option]
 
 Remember: 
 - Start with ✅ ПРАВИЛЬНО! or ❌ НЕПРАВИЛЬНО!
@@ -2795,8 +2889,6 @@ A) [option 1]
 B) [option 2] 
 C) [option 3]
 D) [option 4]
-
-Правильный ответ: [letter] - [answer text]
 
 Start with the first easy question. Remember: everything must be in Russian!";
 
@@ -3007,9 +3099,6 @@ Start with the first easy question. Remember: everything must be in Russian!";
                     await ShowCursorMenuAsync(chatId, messageId);
                     break;
             }
-            
-            // Удаляем предыдущее сообщение ПОСЛЕ отправки нового
-            await DeleteMessageAsync(chatId, messageId);
         }
         catch (Exception ex)
         {
@@ -3046,7 +3135,7 @@ Start with the first easy question. Remember: everything must be in Russian!";
             },
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/start")
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад")
             }
         });
 
@@ -3094,7 +3183,7 @@ Start with the first easy question. Remember: everything must be in Russian!";
             },
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/start")
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад")
             }
         });
 
@@ -3131,7 +3220,7 @@ Start with the first easy question. Remember: everything must be in Russian!";
             },
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/start")
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад")
             }
         });
 
@@ -3169,7 +3258,7 @@ Start with the first easy question. Remember: everything must be in Russian!";
             },
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "menu:main")
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад")
             }
         });
 
@@ -3200,7 +3289,7 @@ Start with the first easy question. Remember: everything must be in Russian!";
             },
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/start")
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад")
             }
         });
 
@@ -3948,7 +4037,7 @@ help - полный список команд";
             },
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "menu:main"),
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад"),
             }
         });
 
@@ -3960,7 +4049,7 @@ help - полный список команд";
         var query = text.Replace("/gifsearch", "").Trim();
         if (string.IsNullOrWhiteSpace(query))
         {
-            await _botClient.SendTextMessageAsync(chatId, "🔍 **Поиск GIF**\n\nВведите запрос для поиска GIF:\n`/gifsearch котики`", parseMode: ParseMode.Markdown, disableNotification: true);
+            await SendMessageWithBackButtonAsync(chatId, "🔍 **Поиск GIF**\n\nВведите запрос для поиска GIF:\n`/gifsearch котики`");
             return;
         }
 
@@ -4034,7 +4123,7 @@ help - полный список команд";
 
 После отправки GIF я покажу следующие шаги для настройки текста.";
 
-        await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
+        await SendMessageWithBackButtonAsync(chatId, message);
         
         // Устанавливаем флаг ожидания GIF
         _pendingGifTexts[chatId] = "waiting_for_gif";
@@ -4098,9 +4187,7 @@ help - полный список команд";
             var settings = _gifTextSettings.ContainsKey(chatId) ? _gifTextSettings[chatId] : GifTextSettings.Default;
             
             // Добавляем текст на GIF
-#pragma warning disable CA1416 // Validate platform compatibility
             var editedGifBytes = await _gifTextEditorService.AddTextToGifAsync(fileUrl, textSettings, settings.Position, settings.TextColor);
-#pragma warning restore CA1416 // Validate platform compatibility
             
             if (editedGifBytes == null)
             {
@@ -4121,17 +4208,17 @@ help - полный список команд";
         }
     }
 
-    private string GetColorName(System.Drawing.Color color)
+    private string GetColorName(string color)
     {
-        return color switch
+        return color.ToLower() switch
         {
-            System.Drawing.Color c when c.Name == "White" => "белый",
-            System.Drawing.Color c when c.Name == "Black" => "черный",
-            System.Drawing.Color c when c.Name == "Red" => "красный",
-            System.Drawing.Color c when c.Name == "Green" => "зеленый",
-            System.Drawing.Color c when c.Name == "Blue" => "синий",
-            System.Drawing.Color c when c.Name == "Yellow" => "желтый",
-            System.Drawing.Color c when c.Name == "Purple" => "фиолетовый",
+            "white" => "белый",
+            "black" => "черный",
+            "red" => "красный",
+            "green" => "зеленый",
+            "blue" => "синий",
+            "yellow" => "желтый",
+            "purple" => "фиолетовый",
             _ => "пользовательский"
         };
     }
@@ -4313,14 +4400,14 @@ help - полный список команд";
             // Устанавливаем новый цвет
             settings.TextColor = colorName switch
             {
-                "white" => System.Drawing.Color.FromName("White"),
-                "black" => System.Drawing.Color.FromName("Black"),
-                "red" => System.Drawing.Color.FromName("Red"),
-                "green" => System.Drawing.Color.FromName("Green"),
-                "blue" => System.Drawing.Color.FromName("Blue"),
-                "yellow" => System.Drawing.Color.FromName("Yellow"),
-                "purple" => System.Drawing.Color.FromName("Purple"),
-                _ => System.Drawing.Color.FromName("White")
+                "white" => "white",
+                "black" => "black",
+                "red" => "red",
+                "green" => "green",
+                "blue" => "blue",
+                "yellow" => "yellow",
+                "purple" => "purple",
+                _ => "white"
             };
             
             var colorDisplayName = GetColorName(settings.TextColor);
@@ -4388,22 +4475,85 @@ help - полный список команд";
                 return;
             }
 
-            // Отправляем текстовый ответ
-            await _botClient.SendTextMessageAsync(chatId, aiResponse, disableNotification: true);
+            // Проверяем, содержит ли ответ инструкцию для отправки GIF
+            var gifInstruction = ExtractGifInstruction(aiResponse);
+            var cleanResponse = RemoveGifInstruction(aiResponse);
 
-            // Проверяем, нужно ли добавить GIF к ответу
-            var shouldAddGif = ShouldAddGifToResponse(aiResponse, userMessage);
-            if (shouldAddGif)
+            // Отправляем текстовый ответ
+            await SendMessageWithBackButtonAsync(chatId, cleanResponse);
+
+            // Если AI указал, что нужно отправить GIF, отправляем его
+            if (!string.IsNullOrEmpty(gifInstruction))
             {
-                await AddEmotionalGifToResponseAsync(chatId, aiResponse, userMessage);
+                await AddEmotionalGifToResponseAsync(chatId, gifInstruction, userMessage);
             }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"❌ Error handling AI response with GIF: {ex.Message}");
             // Отправляем хотя бы текстовый ответ
-            await _botClient.SendTextMessageAsync(chatId, aiResponse, disableNotification: true);
+            await SendMessageWithBackButtonAsync(chatId, aiResponse);
         }
+    }
+
+    private string ExtractGifInstruction(string aiResponse)
+    {
+        // Ищем специальные теги для GIF в ответе AI
+        var gifPatterns = new[]
+        {
+            "[GIF:",
+            "[GIF:",
+            "GIF:",
+            "gif:",
+            "🎬:",
+            "📱:"
+        };
+
+        foreach (var pattern in gifPatterns)
+        {
+            var startIndex = aiResponse.IndexOf(pattern, StringComparison.OrdinalIgnoreCase);
+            if (startIndex >= 0)
+            {
+                var endIndex = aiResponse.IndexOf("]", startIndex);
+                if (endIndex > startIndex)
+                {
+                    var gifInstruction = aiResponse.Substring(startIndex + pattern.Length, endIndex - startIndex - pattern.Length).Trim();
+                    return gifInstruction;
+                }
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private string RemoveGifInstruction(string aiResponse)
+    {
+        // Удаляем инструкции GIF из ответа
+        var gifPatterns = new[]
+        {
+            "[GIF:",
+            "[GIF:",
+            "GIF:",
+            "gif:",
+            "🎬:",
+            "📱:"
+        };
+
+        var cleanResponse = aiResponse;
+        foreach (var pattern in gifPatterns)
+        {
+            var startIndex = cleanResponse.IndexOf(pattern, StringComparison.OrdinalIgnoreCase);
+            if (startIndex >= 0)
+            {
+                var endIndex = cleanResponse.IndexOf("]", startIndex);
+                if (endIndex > startIndex)
+                {
+                    cleanResponse = cleanResponse.Remove(startIndex, endIndex - startIndex + 1);
+                }
+            }
+        }
+
+        return cleanResponse.Trim();
     }
 
     private bool ShouldAddGifToResponse(string aiResponse, string userMessage)
@@ -4434,9 +4584,16 @@ help - полный список команд";
             var gifs = await _tenorService.GetGifsByEmotionAsync(emotion);
             if (gifs.Count > 0)
             {
-                var randomGif = gifs[new Random().Next(gifs.Count)];
+                var randomGif = gifs[_random.Next(gifs.Count)];
+                
+                // Создаем кнопку "Назад" для GIF
+                var inlineKeyboard = new InlineKeyboardMarkup(new[]
+                {
+                    new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") }
+                });
+                
                 await _botClient.SendAnimationAsync(chatId, InputFile.FromUri(randomGif.Url), 
-                    caption: $"🎬 {emotion}: {randomGif.Title}", disableNotification: true);
+                    caption: $"🎬 {emotion}: {randomGif.Title}", replyMarkup: inlineKeyboard, disableNotification: true);
             }
         }
         catch (Exception ex)
@@ -4449,20 +4606,34 @@ help - полный список команд";
     {
         var lowerResponse = response.ToLower();
         
-        if (lowerResponse.Contains("смешно") || lowerResponse.Contains("весело") || lowerResponse.Contains("😂") || lowerResponse.Contains("😄"))
+        if (lowerResponse.Contains("смешно") || lowerResponse.Contains("весело") || lowerResponse.Contains("😂") || lowerResponse.Contains("😄") || lowerResponse.Contains("laugh"))
             return "смех";
-        if (lowerResponse.Contains("грустно") || lowerResponse.Contains("печально") || lowerResponse.Contains("😢"))
+        if (lowerResponse.Contains("грустно") || lowerResponse.Contains("печально") || lowerResponse.Contains("😢") || lowerResponse.Contains("sad"))
             return "грусть";
-        if (lowerResponse.Contains("зло") || lowerResponse.Contains("злой") || lowerResponse.Contains("😡"))
+        if (lowerResponse.Contains("зло") || lowerResponse.Contains("злой") || lowerResponse.Contains("😡") || lowerResponse.Contains("angry"))
             return "злость";
-        if (lowerResponse.Contains("радость") || lowerResponse.Contains("счастье") || lowerResponse.Contains("😍"))
+        if (lowerResponse.Contains("радость") || lowerResponse.Contains("счастье") || lowerResponse.Contains("😍") || lowerResponse.Contains("happy"))
             return "счастье";
-        if (lowerResponse.Contains("удивительно") || lowerResponse.Contains("🤔") || lowerResponse.Contains("?"))
+        if (lowerResponse.Contains("удивительно") || lowerResponse.Contains("🤔") || lowerResponse.Contains("?") || lowerResponse.Contains("surprised"))
             return "удивление";
-        if (lowerResponse.Contains("страшно") || lowerResponse.Contains("боюсь"))
+        if (lowerResponse.Contains("страшно") || lowerResponse.Contains("боюсь") || lowerResponse.Contains("scared"))
             return "страх";
-        if (lowerResponse.Contains("любовь") || lowerResponse.Contains("❤️"))
+        if (lowerResponse.Contains("любовь") || lowerResponse.Contains("❤️") || lowerResponse.Contains("love"))
             return "любовь";
+        if (lowerResponse.Contains("привет") || lowerResponse.Contains("hello") || lowerResponse.Contains("hi"))
+            return "счастье";
+        if (lowerResponse.Contains("спасибо") || lowerResponse.Contains("thanks"))
+            return "счастье";
+        if (lowerResponse.Contains("шутка") || lowerResponse.Contains("анекдот") || lowerResponse.Contains("юмор") || lowerResponse.Contains("joke"))
+            return "шутка";
+        if (lowerResponse.Contains("работа") || lowerResponse.Contains("труд") || lowerResponse.Contains("работаю") || lowerResponse.Contains("work"))
+            return "работа";
+        if (lowerResponse.Contains("оффтоп") || lowerResponse.Contains("развлечение") || lowerResponse.Contains("отвлечение"))
+            return "оффтоп";
+        if (lowerResponse.Contains("фол") || lowerResponse.Contains("поддержка") || lowerResponse.Contains("помощь") || lowerResponse.Contains("support"))
+            return "фол";
+        if (lowerResponse.Contains("программирование") || lowerResponse.Contains("код") || lowerResponse.Contains("python") || lowerResponse.Contains("javascript") || lowerResponse.Contains("programming"))
+            return "программирование";
             
         return "мемы"; // По умолчанию
     }
@@ -4549,7 +4720,7 @@ help - полный список команд";
             var gifs = await _tenorService.SearchGifsAsync(gifCategory, 3);
             if (gifs.Count > 0)
             {
-                var randomGif = gifs[new Random().Next(gifs.Count)];
+                var randomGif = gifs[_random.Next(gifs.Count)];
                 await _botClient.SendAnimationAsync(chatId, InputFile.FromUri(randomGif.Url), 
                     caption: $"🎬 Вопрос про мем: {randomGif.Title}", disableNotification: true);
             }

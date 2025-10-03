@@ -1,0 +1,9 @@
+{
+  "workbench.sideBar.location": "left",
+  "workbench.activityBar.location": "default",
+  "workbench.sideBar.vertical": true,
+  "workbench.activityBar.vertical": true,
+  "workbench.sideBar.orientation": "vertical",
+  "workbench.activityBar.orientation": "vertical"
+}
+

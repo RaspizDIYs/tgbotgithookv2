@@ -1,0 +1,13 @@
+{
+  "workbench.sideBar.location": "right",
+  "workbench.activityBar.location": "default",
+  "workbench.sideBar.vertical": true,
+  "workbench.activityBar.vertical": true,
+  "workbench.sideBar.orientation": "vertical",
+  "workbench.activityBar.orientation": "vertical",
+  "workbench.sideBar.width": 300,
+  "workbench.activityBar.width": 48,
+  "workbench.sideBar.compact": false,
+  "workbench.activityBar.compact": false
+}
+
