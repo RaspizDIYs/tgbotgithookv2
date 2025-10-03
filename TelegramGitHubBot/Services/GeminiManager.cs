@@ -80,7 +80,7 @@ public class GeminiManager
         // Пробуем всех агентов по очереди
         var attempts = 0;
         var startIndex = _currentAgentIndex;
-        Exception lastException = null;
+        Exception? lastException = null;
 
         while (attempts < _agents.Count)
         {
@@ -226,7 +226,7 @@ public class GeminiManager
 
         // Пробуем всех агентов по очереди
         var attempts = 0;
-        Exception lastException = null;
+        Exception? lastException = null;
 
         while (attempts < _agents.Count)
         {

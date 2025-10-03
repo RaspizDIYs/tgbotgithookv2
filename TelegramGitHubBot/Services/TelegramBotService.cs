@@ -632,7 +632,7 @@ public class TelegramBotService
 🎮 *Игры:*
 🎯 /game - Меню игр
 😄 /gamememe - Игра с мемами
-😂 /gamelol - Игра с мемами LOL
+😂 /gamelol - Викторина League of Legends
 💻 /gameprogramming - Программирование
 ⏹️ /gamestop - Остановить игру
 🧪 /gametest - Тест игры
@@ -3051,7 +3051,7 @@ Start with the first easy question. Remember: everything must be in Russian!";
             },
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("😂 LOL мемы", "/gamelol"),
+                InlineKeyboardButton.WithCallbackData("⚔️ League of Legends", "/gamelol"),
                 InlineKeyboardButton.WithCallbackData("💻 Программирование", "/gameprogramming"),
             },
             new[]
