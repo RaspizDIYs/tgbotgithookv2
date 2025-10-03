@@ -374,11 +374,26 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// CORS: временно разрешаем все origin, методы, заголовки
-app.UseCors(corsBuilder => corsBuilder
-    .AllowAnyOrigin()
-    .AllowAnyMethod()
-    .AllowAnyHeader());
+// CORS: читаем ALLOWED_ORIGINS (comma-separated). Если не задано — разрешаем все (временно)
+var allowedOrigins = (Environment.GetEnvironmentVariable("ALLOWED_ORIGINS") ?? string.Empty)
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+if (allowedOrigins.Length > 0)
+{
+    Console.WriteLine($"CORS: restricting to origins: {string.Join("; ", allowedOrigins)}");
+    app.UseCors(corsBuilder => corsBuilder
+        .WithOrigins(allowedOrigins)
+        .AllowAnyMethod()
+        .AllowAnyHeader());
+}
+else
+{
+    Console.WriteLine("CORS: ALLOWED_ORIGINS not set — allowing any origin (temporary)");
+    app.UseCors(corsBuilder => corsBuilder
+        .AllowAnyOrigin()
+        .AllowAnyMethod()
+        .AllowAnyHeader());
+}
 
 // Webhook endpoint for GitHub
 app.MapPost("/webhook/github", async (HttpContext context, WebhookHandlerService webhookHandler) =>
@@ -400,13 +415,7 @@ app.MapPost("/webhook/telegram/{token}", async (string token, HttpContext contex
     await telegramService.HandleUpdateAsync(context);
 });
 
-// Serve static files for webapp
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(
-        Path.Combine(Directory.GetCurrentDirectory(), "..", "webapp")),
-    RequestPath = "/webapp"
-});
+// Static for webapp теперь отдаётся из GitHub Pages, локальную директорию больше не публикуем
 
 // Health check endpoint
 // Self-ping endpoint to keep instance alive

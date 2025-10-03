@@ -1,2 +1,74 @@
-@media (max-width: 991px){ body{font-size:14px} }
+/* Mobile styles for /webapp/games */
+@media (max-width: 991px) {
+  body { 
+    font-size: 14px;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+  }
+  
+  .navbar {
+    background-color: var(--navbar-bg) !important;
+    color: var(--navbar-text) !important;
+  }
+  
+  .navbar-brand, .navbar-nav .nav-link {
+    color: var(--navbar-link) !important;
+  }
+  
+  .navbar-nav .nav-link:hover {
+    color: var(--navbar-link-hover) !important;
+  }
+  
+  .navbar-toggler {
+    color: var(--navbar-toggler) !important;
+    border-color: var(--navbar-toggler-border) !important;
+  }
+  
+  .navbar-collapse {
+    background-color: var(--collapse-bg) !important;
+    color: var(--collapse-text) !important;
+    border-top: 1px solid var(--collapse-border);
+  }
+  
+  .btn {
+    color: var(--btn-outline) !important;
+  }
+  
+  .btn-primary {
+    background-color: var(--btn-primary) !important;
+    border-color: var(--btn-primary) !important;
+  }
+  
+  .btn-secondary {
+    background-color: var(--btn-secondary) !important;
+    border-color: var(--btn-secondary) !important;
+  }
+  
+  .text-primary { color: var(--text-primary) !important; }
+  .text-secondary { color: var(--text-secondary) !important; }
+  .text-muted { color: var(--text-muted) !important; }
+  
+  .bg-primary { background-color: var(--bg-primary) !important; }
+  .bg-secondary { background-color: var(--bg-secondary) !important; }
+  
+  .border { border-color: var(--border-color) !important; }
+  
+  .card {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+  }
+  
+  .form-control {
+    background-color: var(--bg-primary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+  }
+  
+  .form-control:focus {
+    background-color: var(--bg-primary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--btn-primary) !important;
+  }
+}
 

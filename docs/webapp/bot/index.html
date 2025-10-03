@@ -15,10 +15,28 @@
   </style>
 </head>
 <body>
-  <nav class="navbar" style="background:var(--app-bg);border-bottom:1px solid var(--app-secondary)">
+  <nav class="navbar navbar-expand-lg" style="background:var(--app-bg);border-bottom:1px solid var(--app-secondary)">
     <div class="container-fluid">
-      <a class="navbar-brand d-flex align-items-center gap-2" href="/webapp/"><span class="material-icons">arrow_back</span> Назад</a>
-      <span class="navbar-text d-flex align-items-center gap-2"><span class="material-icons">dashboard_customize</span> Управление ботом</span>
+      <a class="navbar-brand d-flex align-items-center gap-2" href="/tgbotgithookv2/webapp/"><span class="material-icons">smart_toy</span> GitHub Bot</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+          <li class="nav-item"><a class="nav-link" href="/tgbotgithookv2/webapp/">Чат</a></li>
+          <li class="nav-item"><a class="nav-link" href="/tgbotgithookv2/webapp/ai/">AI</a></li>
+          <li class="nav-item"><a class="nav-link active" href="/tgbotgithookv2/webapp/bot/">Бот</a></li>
+          <li class="nav-item"><a class="nav-link" href="/tgbotgithookv2/webapp/games/">Игры</a></li>
+          <li class="nav-item"><a class="nav-link" href="/tgbotgithookv2/webapp/cursor/">Cursor</a></li>
+        </ul>
+        <div class="d-flex align-items-center gap-3">
+          <div class="form-check form-switch d-flex align-items-center m-0">
+            <input class="form-check-input" type="checkbox" role="switch" id="langSwitch">
+            <label class="form-check-label ms-1" for="langSwitch" id="langSwitchLabel">RU</label>
+          </div>
+          <button id="themeToggle" class="btn btn-secondary p-2" title="Переключить тему"><span class="material-icons">dark_mode</span></button>
+        </div>
+      </div>
     </div>
   </nav>
   <div class="container">
@@ -39,6 +57,34 @@
     document.getElementById('git-stats').onclick=()=>api('git/stats').then(x=>out.textContent=JSON.stringify(x,null,2)).catch(e=>alert(e.message));
     document.getElementById('recent-commits').onclick=()=>api('git/commits?limit=5').then(x=>out.textContent=JSON.stringify(x,null,2)).catch(e=>alert(e.message));
     document.getElementById('leaderboard').onclick=()=>api('stats/leaderboard').then(x=>out.textContent=JSON.stringify(x,null,2)).catch(e=>alert(e.message));
+
+    // theme toggle
+    (function initTheme(){
+      const btn=document.getElementById('themeToggle');
+      const saved=localStorage.getItem('webapp-theme')||'light';
+      document.documentElement.setAttribute('data-theme', saved);
+      btn?.addEventListener('click',()=>{
+        const cur=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';
+        document.documentElement.setAttribute('data-theme',cur);
+        localStorage.setItem('webapp-theme',cur);
+      });
+    })();
+
+    // lang switch
+    (function initLangSwitch(){
+      const sw=document.getElementById('langSwitch');
+      const label=document.getElementById('langSwitchLabel');
+      const saved=(localStorage.getItem('webapp-lang')||'ru').toLowerCase();
+      const isEn=saved==='en';
+      if(sw) sw.checked=isEn;
+      if(label) label.textContent=isEn?'EN':'RU';
+      sw?.addEventListener('change',()=>{
+        const lang=sw.checked?'en':'ru';
+        localStorage.setItem('webapp-lang',lang);
+        label.textContent=sw.checked?'EN':'RU';
+        location.reload();
+      });
+    })();
   </script>
 </body>
 </html>

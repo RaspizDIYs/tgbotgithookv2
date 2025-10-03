@@ -283,16 +283,25 @@
     <div class="container">
         <nav class="navbar navbar-expand-lg">
             <div class="container-fluid">
-                <a class="navbar-brand d-flex align-items-center gap-2" href="#" onclick="showPage('dashboard')"><span class="material-icons">smart_toy</span> GitHub Bot</a>
+                <a class="navbar-brand d-flex align-items-center gap-2" href="#" onclick="showPage('dashboard')"><span class="material-icons">smart_toy</span> <span data-i18n="title">GitHub Bot Dashboard</span></a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
                 <div class="collapse navbar-collapse" id="navbarNav">
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                        <li class="nav-item"><a class="nav-link active" aria-current="page" href="#" onclick="showPage('dashboard')"><span class="material-icons">dashboard</span></a></li>
-                        <li class="nav-item"><a class="nav-link" href="#" onclick="showPage('cursor')"><span class="material-icons">code</span></a></li>
+                        <li class="nav-item"><a class="nav-link active d-flex align-items-center gap-1" aria-current="page" href="/tgbotgithookv2/webapp/"><span class="material-icons">forum</span><span class="d-lg-inline d-none">Чат</span></a></li>
+                        <li class="nav-item"><a class="nav-link d-flex align-items-center gap-1" href="/tgbotgithookv2/webapp/ai/"><span class="material-icons">psychology</span><span class="d-lg-inline d-none">AI</span></a></li>
+                        <li class="nav-item"><a class="nav-link d-flex align-items-center gap-1" href="/tgbotgithookv2/webapp/bot/"><span class="material-icons">dashboard_customize</span><span class="d-lg-inline d-none">Бот</span></a></li>
+                        <li class="nav-item"><a class="nav-link d-flex align-items-center gap-1" href="/tgbotgithookv2/webapp/games/"><span class="material-icons">sports_esports</span><span class="d-lg-inline d-none">Игры</span></a></li>
+                        <li class="nav-item"><a class="nav-link d-flex align-items-center gap-1" href="/tgbotgithookv2/webapp/cursor/"><span class="material-icons">code</span><span class="d-lg-inline d-none">Cursor</span></a></li>
                     </ul>
-                    <button id="themeToggle" class="btn btn-secondary d-flex align-items-center gap-1" title="Переключить тему"><span class="material-icons">dark_mode</span><span>Тема</span></button>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="form-check form-switch d-flex align-items-center m-0">
+                            <input class="form-check-input" type="checkbox" role="switch" id="langSwitch">
+                            <label class="form-check-label ms-1" for="langSwitch" id="langSwitchLabel">RU</label>
+                        </div>
+                        <button id="themeToggle" class="btn btn-secondary p-2" title="Переключить тему"><span class="material-icons">dark_mode</span></button>
+                    </div>
                 </div>
             </div>
         </nav>
@@ -327,7 +336,7 @@
                         <div class="section">
                             <div class="section-title d-flex align-items-center gap-1"><span class="material-icons">code</span> Cursor</div>
                             <div class="d-grid gap-2">
-                                <button class="btn btn-secondary d-flex align-items-center gap-1" onclick="showPage('cursor')"><span class="material-icons">link</span> Диплинки Cursor</button>
+                        <button class="btn btn-secondary d-flex align-items-center gap-1" onclick="window.location.href='/tgbotgithookv2/webapp/cursor/'"><span class="material-icons">link</span> Диплинки Cursor</button>
                                 <button class="btn btn-secondary d-flex align-items-center gap-1" id="cursor-help"><span class="material-icons">help_outline</span> Помощь Cursor</button>
                             </div>
                         </div>
@@ -472,8 +481,8 @@
                         <div id="chatMessages" class="chat-messages"></div>
                         <div class="chat-input">
                             <span class="material-icons">chat_bubble_outline</span>
-                            <textarea id="chatInput" placeholder="Напишите сообщение... (демо)"></textarea>
-                            <button id="sendChat" class="btn btn-primary d-flex align-items-center gap-1"><span class="material-icons">send</span> Отправить</button>
+                            <textarea id="chatInput" data-i18n-placeholder="chat_placeholder" placeholder="Напишите сообщение..."></textarea>
+                            <button id="sendChat" class="btn btn-primary d-flex align-items-center justify-content-center" title="Отправить"><span class="material-icons">send</span></button>
                         </div>
                     </div>
                 </main>
@@ -1125,6 +1134,33 @@
 
         // Initialize app when page loads
         init();
+
+        // i18n setup and switchers
+        (async () => {
+            try {
+                await i18n.load('./lang');
+                i18n.apply();
+            } catch {}
+        })();
+        // Language switch
+        (function initLangSwitch(){
+            const sw = document.getElementById('langSwitch');
+            const label = document.getElementById('langSwitchLabel');
+            const saved = (localStorage.getItem('webapp-lang') || 'ru').toLowerCase();
+            const isEn = saved === 'en';
+            if (sw) sw.checked = isEn;
+            if (label) label.textContent = isEn ? 'EN' : 'RU';
+            sw?.addEventListener('change', () => {
+                const lang = sw.checked ? 'en' : 'ru';
+                localStorage.setItem('webapp-lang', lang);
+                if (typeof i18n !== 'undefined' && i18n.switch) {
+                    i18n.switch(lang);
+                } else {
+                    location.reload();
+                }
+                if (label) label.textContent = sw.checked ? 'EN' : 'RU';
+            });
+        })();
 
         // Chevron toggle
         const chevrons = [
