@@ -1,0 +1,8 @@
+{
+  "title": "AI assistant",
+  "start": "Start",
+  "stop": "Stop",
+  "status": "Status",
+  "clear": "Clear context"
+}
+
