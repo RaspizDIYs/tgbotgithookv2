@@ -2615,15 +2615,15 @@ Remember:
 - Start with ✅ ПРАВИЛЬНО! or ❌ НЕПРАВИЛЬНО!
 - ALL responses must be in Russian!
 - Current question: {gameState.CurrentQuestion + 1}/10
-- Wrong answers: {gameState.WrongAnswers}/2";
+- Wrong answers: {gameState.WrongAnswers}/1 (game ends after 1 wrong answer)";
             
             var aiResponse = await _geminiManager.GenerateResponseWithContextAsync(prompt, chatId);
             
             // Отправляем ответ AI
             await _botClient.SendTextMessageAsync(chatId, aiResponse, disableNotification: true);
             
-            // Если это игра с мемами, добавляем GIF
-            if (gameState.GameType == "meme" && answer != "start")
+            // Если это игра с мемами, добавляем GIF после каждого ответа и при старте
+            if (gameState.GameType == "meme")
             {
                 await AddGifToMemeGameAsync(chatId, aiResponse, gameState);
             }
@@ -2655,8 +2655,8 @@ Remember:
                 shouldEndGame = true;
             }
             
-            // Проверяем количество неправильных ответов (максимум 2)
-            if (gameState.WrongAnswers >= 2)
+            // Проверяем количество неправильных ответов (максимум 1)
+            if (gameState.WrongAnswers >= 1)
             {
                 shouldEndGame = true;
             }

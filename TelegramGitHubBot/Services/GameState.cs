@@ -25,10 +25,11 @@ IMPORTANT: All questions, answers, and responses must be in RUSSIAN language onl
 
 RULES:
 - 10 questions with 4 answer options each
-- Player has 1 lifeline (can make 1 mistake)
+- Player has ONLY 1 lifeline (can make 1 mistake, then game ends)
 - Only real popular Russian memes, no fictional ones
 - Questions MUST be strictly within the topic of Russian internet memes
 - Correct answer is NOT shown in the question - only revealed after player's response
+- EVERY question MUST include a GIF from Tenor API related to the meme being asked about
 
 RESPONSE FORMAT (MUST be in Russian):
 Вопрос: [question text]
@@ -47,7 +48,7 @@ IMPORTANT: All questions, answers, and responses must be in RUSSIAN language onl
 
 RULES:
 - 10 questions with 4 answer options each
-- Player has 1 lifeline (can make 1 mistake)
+- Player has ONLY 1 lifeline (can make 1 mistake, then game ends)
 - Only real facts about LoL, no fictional information
 - Questions MUST be strictly within the topic of League of Legends
 - Correct answer is NOT shown in the question - only revealed after player's response
@@ -69,7 +70,7 @@ IMPORTANT: All questions, answers, and responses must be in RUSSIAN language onl
 
 RULES:
 - 10 questions with 4 answer options each
-- Player has 1 lifeline (can make 1 mistake)
+- Player has ONLY 1 lifeline (can make 1 mistake, then game ends)
 - Not very complex programming questions, accessible to beginners
 - Questions MUST be strictly within the topic of programming
 - Correct answer is NOT shown in the question - only revealed after player's response
