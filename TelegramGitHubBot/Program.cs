@@ -494,6 +494,36 @@ app.MapPost("/api/ai/start", async (HttpContext context, TelegramBotService tele
     }
 });
 
+// Универсальный проброс текстовой команды бота из WebApp
+app.MapPost("/api/bot/command", async (HttpContext context, TelegramBotService telegramService) =>
+{
+    try
+    {
+        using var reader = new StreamReader(context.Request.Body);
+        var body = await reader.ReadToEndAsync();
+        var payload = System.Text.Json.JsonDocument.Parse(body);
+        var command = payload.RootElement.GetProperty("command").GetString() ?? string.Empty;
+        var chatIdStr = payload.RootElement.TryGetProperty("chatId", out var c) ? c.GetString() : null;
+        if (string.IsNullOrWhiteSpace(command))
+            return Results.BadRequest("command is required");
+        long chatId = 0;
+        if (!string.IsNullOrWhiteSpace(chatIdStr)) long.TryParse(chatIdStr, out chatId);
+        if (chatId == 0)
+        {
+            var envChat = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID");
+            if (!string.IsNullOrWhiteSpace(envChat) && long.TryParse(envChat, out var envChatId)) chatId = envChatId;
+        }
+        if (chatId == 0) return Results.BadRequest("chatId is required (or set TELEGRAM_CHAT_ID)");
+
+        await telegramService.HandleCommandAsync(chatId, command);
+        return Results.Ok(new { success = true });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error sending command: {ex.Message}");
+    }
+});
+
 app.MapPost("/api/ai/stop", async (HttpContext context, TelegramBotService telegramService) =>
 {
     try
