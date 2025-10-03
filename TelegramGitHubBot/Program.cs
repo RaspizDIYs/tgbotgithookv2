@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Runtime.Versioning;
 using Telegram.Bot;
 using Octokit;
 using TelegramGitHubBot.Services;
@@ -81,7 +82,9 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
                 var httpClient = new HttpClient();
                 var geminiManager = new GeminiManager(httpClient, builder.Configuration);
                 var tenorService = new TenorService(httpClient, builder.Configuration);
+#pragma warning disable CA1416 // Validate platform compatibility
                 var gifTextEditorService = new GifTextEditorService(httpClient);
+#pragma warning restore CA1416 // Validate platform compatibility
                 var telegramService = new TelegramBotService(botClient, githubService, achievementService, geminiManager, messageStatsService, tenorService, gifTextEditorService);
 
                 int? lastUpdateId = null;
@@ -270,7 +273,9 @@ builder.Services.AddSingleton<AchievementService>();
 builder.Services.AddSingleton<MessageStatsService>();
 builder.Services.AddSingleton<WebhookHandlerService>();
 builder.Services.AddHttpClient<TenorService>();
+#pragma warning disable CA1416 // Validate platform compatibility
 builder.Services.AddHttpClient<GifTextEditorService>();
+#pragma warning restore CA1416 // Validate platform compatibility
 
 var app = builder.Build();
 

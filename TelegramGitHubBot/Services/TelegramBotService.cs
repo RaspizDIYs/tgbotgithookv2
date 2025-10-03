@@ -4014,7 +4014,9 @@ help - полный список команд";
             var fileUrl = $"https://api.telegram.org/file/bot{token}/{file.FilePath}";
 
             // Добавляем текст на GIF
+#pragma warning disable CA1416 // Validate platform compatibility
             var editedGifBytes = await _gifTextEditorService.AddTextToGifAsync(fileUrl, "Текст на GIF", TextPosition.Bottom, System.Drawing.Color.White);
+#pragma warning restore CA1416 // Validate platform compatibility
             
             if (editedGifBytes == null)
             {

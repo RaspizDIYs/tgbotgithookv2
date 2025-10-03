@@ -1,9 +1,11 @@
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Drawing.Text;
+using System.Runtime.Versioning;
 
 namespace TelegramGitHubBot.Services;
 
+[SupportedOSPlatform("windows")]
 public class GifTextEditorService
 {
     private readonly HttpClient _httpClient;
@@ -33,38 +35,41 @@ public class GifTextEditorService
         }
     }
 
-    private async Task<byte[]> CreateGifWithTextAsync(Image originalImage, string text, TextPosition position, Color textColor)
+    private Task<byte[]> CreateGifWithTextAsync(Image originalImage, string text, TextPosition position, Color textColor)
     {
-        using var memoryStream = new MemoryStream();
-        
-        // Получаем информацию о кадрах GIF
-        var frameCount = originalImage.GetFrameCount(FrameDimension.Time);
-        var frameDelay = GetFrameDelay(originalImage);
-        
-        // Создаем новый GIF с текстом
-        using var gifEncoder = new GifEncoder(memoryStream);
-        
-        for (int i = 0; i < frameCount; i++)
+        return Task.Run(() =>
         {
-            originalImage.SelectActiveFrame(FrameDimension.Time, i);
+            using var memoryStream = new MemoryStream();
             
-            // Создаем копию кадра
-            using var frame = new Bitmap(originalImage);
-            using var graphics = Graphics.FromImage(frame);
+            // Получаем информацию о кадрах GIF
+            var frameCount = originalImage.GetFrameCount(FrameDimension.Time);
+            var frameDelay = GetFrameDelay(originalImage);
             
-            // Настраиваем качество рендеринга
-            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            graphics.TextRenderingHint = TextRenderingHint.AntiAlias;
+            // Создаем новый GIF с текстом
+            using var gifEncoder = new GifEncoder(memoryStream);
             
-            // Добавляем текст
-            AddTextToFrame(graphics, frame, text, position, textColor);
+            for (int i = 0; i < frameCount; i++)
+            {
+                originalImage.SelectActiveFrame(FrameDimension.Time, i);
+                
+                // Создаем копию кадра
+                using var frame = new Bitmap(originalImage);
+                using var graphics = Graphics.FromImage(frame);
+                
+                // Настраиваем качество рендеринга
+                graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                graphics.TextRenderingHint = TextRenderingHint.AntiAlias;
+                
+                // Добавляем текст
+                AddTextToFrame(graphics, frame, text, position, textColor);
+                
+                // Добавляем кадр в GIF
+                gifEncoder.AddFrame(frame, frameDelay);
+            }
             
-            // Добавляем кадр в GIF
-            gifEncoder.AddFrame(frame, frameDelay);
-        }
-        
-        gifEncoder.Finish();
-        return memoryStream.ToArray();
+            gifEncoder.Finish();
+            return memoryStream.ToArray();
+        });
     }
 
     private void AddTextToFrame(Graphics graphics, Bitmap frame, string text, TextPosition position, Color textColor)
@@ -111,7 +116,11 @@ public class GifTextEditorService
         try
         {
             var delayProperty = image.GetPropertyItem(0x5100); // PropertyTagFrameDelay
-            return BitConverter.ToInt32(delayProperty.Value, 0) * 10; // Конвертируем в миллисекунды
+            if (delayProperty?.Value != null)
+            {
+                return BitConverter.ToInt32(delayProperty.Value, 0) * 10; // Конвертируем в миллисекунды
+            }
+            return 100; // По умолчанию 100мс
         }
         catch
         {
@@ -128,6 +137,7 @@ public enum TextPosition
 }
 
 // Простой GIF энкодер
+[SupportedOSPlatform("windows")]
 public class GifEncoder : IDisposable
 {
     private readonly MemoryStream _stream;
@@ -149,7 +159,9 @@ public class GifEncoder : IDisposable
         
         // Конвертируем кадр в GIF формат
         using var frameStream = new MemoryStream();
+#pragma warning disable CA1416 // Validate platform compatibility
         frame.Save(frameStream, ImageFormat.Gif);
+#pragma warning restore CA1416 // Validate platform compatibility
         
         // Копируем данные кадра (упрощенная версия)
         var frameBytes = frameStream.ToArray();

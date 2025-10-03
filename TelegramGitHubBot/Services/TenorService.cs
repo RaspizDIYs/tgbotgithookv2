@@ -25,8 +25,8 @@ public class TenorService
             {
                 Id = g.Id,
                 Title = g.Title,
-                Url = g.MediaFormats?.Gif?.Url ?? g.MediaFormats?.TinyGif?.Url,
-                PreviewUrl = g.MediaFormats?.TinyGif?.Url,
+                Url = g.MediaFormats?.Gif?.Url ?? g.MediaFormats?.TinyGif?.Url ?? "",
+                PreviewUrl = g.MediaFormats?.TinyGif?.Url ?? "",
                 Tags = g.Tags
             }).ToList() ?? new List<TenorGif>();
         }
@@ -49,8 +49,8 @@ public class TenorService
             {
                 Id = g.Id,
                 Title = g.Title,
-                Url = g.MediaFormats?.Gif?.Url ?? g.MediaFormats?.TinyGif?.Url,
-                PreviewUrl = g.MediaFormats?.TinyGif?.Url,
+                Url = g.MediaFormats?.Gif?.Url ?? g.MediaFormats?.TinyGif?.Url ?? "",
+                PreviewUrl = g.MediaFormats?.TinyGif?.Url ?? "",
                 Tags = g.Tags
             }).ToList() ?? new List<TenorGif>();
         }
