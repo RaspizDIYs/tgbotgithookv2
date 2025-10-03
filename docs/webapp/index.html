@@ -315,6 +315,15 @@
                 </div>
             </div>
 
+            <!-- Cursor Section -->
+            <div class="section">
+                <div class="section-title">💻 Cursor IDE</div>
+                <div class="button-grid">
+                    <button class="btn btn-secondary" id="cursor-links">🔗 Диплинки Cursor</button>
+                    <button class="btn btn-secondary" id="cursor-help">❓ Помощь Cursor</button>
+                </div>
+            </div>
+
             <!-- Recent Commits Section -->
             <div class="section">
                 <div class="section-title">📝 Последние коммиты</div>
@@ -577,6 +586,20 @@
 
         document.getElementById('programming-game').addEventListener('click', () => {
             tg.showAlert('Игра "Программирование" будет запущена в боте. Отправьте /game programming в чат с ботом.');
+        });
+
+        // Cursor buttons
+        document.getElementById('cursor-links').addEventListener('click', () => {
+            // Открываем страницу Cursor в новом окне/вкладке
+            window.open('https://raspizdiys.github.io/tgbotgithookv2/', '_blank');
+        });
+
+        document.getElementById('cursor-help').addEventListener('click', () => {
+            tg.showAlert('💻 Cursor IDE Диплинки\n\n' +
+                'Используйте диплинки для быстрого открытия файлов и промптов в Cursor:\n\n' +
+                '• Для файлов: ?type=file&workspace=path&path=file.js\n' +
+                '• Для промптов: ?type=prompt&text=ваш текст\n\n' +
+                'Нажмите "Диплинки Cursor" для открытия страницы.');
         });
 
         // Initialize app when page loads

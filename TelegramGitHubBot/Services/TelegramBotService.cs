@@ -249,6 +249,23 @@ public class TelegramBotService
                     replyMarkup: inlineKeyboard, disableNotification: true);
                 return;
             }
+            else if (cleanCommand == "/cursor")
+            {
+                var cursorUrl = "https://raspizdiys.github.io/tgbotgithookv2/";
+                
+                var cursorMessage = "💻 **Cursor IDE Диплинки**\n\n" +
+                    "Откройте страницу с диплинками для быстрого доступа к файлам и промптам в Cursor IDE.";
+                
+                var inlineKeyboard = new InlineKeyboardMarkup(new[]
+                {
+                    new[] { InlineKeyboardButton.WithUrl("🔗 Открыть диплинки Cursor", cursorUrl) },
+                    new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") }
+                });
+                
+                await _botClient.SendTextMessageAsync(chatId, cursorMessage, parseMode: ParseMode.Markdown, 
+                    replyMarkup: inlineKeyboard, disableNotification: true);
+                return;
+            }
             else if (cleanCommand == "/game")
             {
                 await ShowGameMenuAsync(chatId);
@@ -821,6 +838,7 @@ public class TelegramBotService
 
 🌐 *Веб-интерфейс:*
 🚀 /webapp - Открыть веб-приложение
+💻 /cursor - Диплинки Cursor IDE
 
 🎮 *Игры:*
 🎯 /game - Меню игр
