@@ -25,9 +25,10 @@ IMPORTANT: All questions, answers, and responses must be in RUSSIAN language onl
 
 RULES:
 - 10 questions with 4 answer options each
-- Difficulty progression: 3 easy → 3 medium → 3 hard → 1 very hard
 - Player has 1 lifeline (can make 1 mistake)
 - Only real popular Russian memes, no fictional ones
+- Questions MUST be strictly within the topic of Russian internet memes
+- Correct answer is NOT shown in the question - only revealed after player's response
 
 RESPONSE FORMAT (MUST be in Russian):
 Вопрос: [question text]
@@ -38,7 +39,7 @@ D) [option 4]
 
 Правильный ответ: [letter] - [answer text]
 
-Start with the first easy question. Remember: everything must be in Russian!",
+Start with the first question. Remember: everything must be in Russian!",
 
         ["lol"] = @"You are the host of a ""What? Where? When?"" quiz game about League of Legends.
 
@@ -46,9 +47,10 @@ IMPORTANT: All questions, answers, and responses must be in RUSSIAN language onl
 
 RULES:
 - 10 questions with 4 answer options each
-- Difficulty progression: 3 easy → 3 medium → 3 hard → 1 very hard
 - Player has 1 lifeline (can make 1 mistake)
 - Only real facts about LoL, no fictional information
+- Questions MUST be strictly within the topic of League of Legends
+- Correct answer is NOT shown in the question - only revealed after player's response
 
 RESPONSE FORMAT (MUST be in Russian):
 Вопрос: [question text]
@@ -59,7 +61,7 @@ D) [option 4]
 
 Правильный ответ: [letter] - [answer text]
 
-Start with the first easy question. Remember: everything must be in Russian!",
+Start with the first question. Remember: everything must be in Russian!",
 
         ["programming"] = @"You are the host of a ""What? Where? When?"" quiz game about programming.
 
@@ -67,9 +69,10 @@ IMPORTANT: All questions, answers, and responses must be in RUSSIAN language onl
 
 RULES:
 - 10 questions with 4 answer options each
-- Difficulty progression: 3 easy → 3 medium → 3 hard → 1 very hard
 - Player has 1 lifeline (can make 1 mistake)
 - Not very complex programming questions, accessible to beginners
+- Questions MUST be strictly within the topic of programming
+- Correct answer is NOT shown in the question - only revealed after player's response
 
 RESPONSE FORMAT (MUST be in Russian):
 Вопрос: [question text]
@@ -80,7 +83,7 @@ D) [option 4]
 
 Правильный ответ: [letter] - [answer text]
 
-Start with the first easy question. Remember: everything must be in Russian!"
+Start with the first question. Remember: everything must be in Russian!"
     };
 
     public static readonly Dictionary<string, string> GameNames = new()
@@ -95,10 +98,11 @@ Start with the first easy question. Remember: everything must be in Russian!"
         var basePrompt = Prompts[gameType];
         var difficultyDescription = GetDifficultyDescription(difficulty);
         
-        return basePrompt.Replace(
-            "Difficulty progression: 3 easy → 3 medium → 3 hard → 1 very hard",
-            $"Difficulty level: {difficultyDescription}"
-        );
+        // Добавляем информацию о сложности в начало промпта
+        return $@"{basePrompt}
+
+CURRENT DIFFICULTY LEVEL: {difficultyDescription}
+Adjust question complexity accordingly while staying strictly within the topic.";
     }
 
     private static string GetDifficultyDescription(string difficulty)
