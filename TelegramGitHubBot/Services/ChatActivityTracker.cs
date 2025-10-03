@@ -11,12 +11,16 @@ public class ChatActivityTracker
     private readonly TenorService _tenorService;
     private readonly GeminiManager _geminiManager;
     private readonly ITelegramBotClient _botClient;
+    private readonly Func<long, bool> _isGeminiModeActive;
+    private readonly Action<long, bool> _setGeminiMode;
 
-    public ChatActivityTracker(TenorService tenorService, GeminiManager geminiManager, ITelegramBotClient botClient)
+    public ChatActivityTracker(TenorService tenorService, GeminiManager geminiManager, ITelegramBotClient botClient, Func<long, bool> isGeminiModeActive, Action<long, bool> setGeminiMode)
     {
         _tenorService = tenorService;
         _geminiManager = geminiManager;
         _botClient = botClient;
+        _isGeminiModeActive = isGeminiModeActive;
+        _setGeminiMode = setGeminiMode;
     }
 
     public async Task TrackMessageAsync(long chatId, long userId, string username, string messageText, DateTime timestamp)
@@ -93,9 +97,12 @@ public class ChatActivityTracker
                 
                 // Отправляем сообщение о том, что AI присоединился к диалогу
                 await _botClient.SendTextMessageAsync(chatId, 
-                    "🤖 *AI присоединился к диалогу!*\n\nОбнаружил оживленную беседу и решил добавить мем 😄", 
+                    "🤖 *AI присоединился к диалогу!*\n\nОбнаружил оживленную беседу и решил добавить мем 😄\n\nТеперь AI активен и будет отвечать на сообщения!", 
                     parseMode: ParseMode.Markdown, 
                     disableNotification: true);
+                
+                // Активируем AI режим для этого чата
+                await ActivateAIModeAsync(chatId);
             }
         }
         catch (Exception ex)
@@ -169,6 +176,32 @@ public class ChatActivityTracker
         {
             Console.WriteLine($"❌ Error getting contextual meme: {ex.Message}");
             return null;
+        }
+    }
+
+    private Task ActivateAIModeAsync(long chatId)
+    {
+        try
+        {
+            // Проверяем, не активен ли уже AI режим
+            if (_isGeminiModeActive(chatId))
+            {
+                return Task.CompletedTask;
+            }
+            
+            // Активируем AI режим
+            _setGeminiMode(chatId, true);
+            
+            // Очищаем контекст для нового диалога
+            _geminiManager.ClearContext(chatId);
+            
+            Console.WriteLine($"🤖 AI mode activated for chat {chatId} due to active dialogue");
+            return Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error activating AI mode: {ex.Message}");
+            return Task.CompletedTask;
         }
     }
 

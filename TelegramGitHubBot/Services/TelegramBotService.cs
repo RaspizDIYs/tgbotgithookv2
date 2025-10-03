@@ -49,7 +49,7 @@ public class TelegramBotService
     private readonly Dictionary<long, GifTextSettings> _gifTextSettings = new(); // Настройки текста для GIF
     private readonly ChatActivityTracker _chatActivityTracker;
 
-    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService, TenorService tenorService, GifTextEditorService gifTextEditorService, ChatActivityTracker chatActivityTracker)
+    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService, TenorService tenorService, GifTextEditorService gifTextEditorService)
     {
         _botClient = botClient;
         _gitHubService = gitHubService ?? throw new ArgumentNullException(nameof(gitHubService));
@@ -58,7 +58,14 @@ public class TelegramBotService
         _messageStatsService = messageStatsService ?? throw new ArgumentNullException(nameof(messageStatsService));
         _tenorService = tenorService ?? throw new ArgumentNullException(nameof(tenorService));
         _gifTextEditorService = gifTextEditorService ?? throw new ArgumentNullException(nameof(gifTextEditorService));
-        _chatActivityTracker = chatActivityTracker ?? throw new ArgumentNullException(nameof(chatActivityTracker));
+        
+        // Создаем ChatActivityTracker с доступом к _geminiMode
+        _chatActivityTracker = new ChatActivityTracker(
+            tenorService, 
+            geminiManager, 
+            botClient,
+            chatId => _geminiMode.ContainsKey(chatId) && _geminiMode[chatId],
+            (chatId, isActive) => _geminiMode[chatId] = isActive);
 
         InitializeSwearWords();
         SetupDailySummaryTimer();
