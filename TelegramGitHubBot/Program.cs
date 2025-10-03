@@ -374,22 +374,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// CORS для GitHub Pages и любых *.github.io (динамически)
+// CORS: временно разрешаем все origin, методы, заголовки
 app.UseCors(corsBuilder => corsBuilder
-    .SetIsOriginAllowed(origin =>
-    {
-        try
-        {
-            var uri = new Uri(origin);
-            return uri.Host.Equals("raspizdiys.github.io", StringComparison.OrdinalIgnoreCase)
-                   || uri.Host.EndsWith(".github.io", StringComparison.OrdinalIgnoreCase)
-                   || uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase);
-        }
-        catch
-        {
-            return false;
-        }
-    })
+    .AllowAnyOrigin()
     .AllowAnyMethod()
     .AllowAnyHeader());
 
