@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace TelegramGitHubBot.Services;
 
@@ -45,10 +46,10 @@ public class TenorService
             var gifs = result?.Results?.Select(g => new TenorGif
             {
                 Id = g.Id,
-                Title = g.Title,
+                Title = g.Title ?? "",
                 Url = g.MediaFormats?.Gif?.Url ?? g.MediaFormats?.TinyGif?.Url ?? "",
                 PreviewUrl = g.MediaFormats?.TinyGif?.Url ?? "",
-                Tags = g.Tags
+                Tags = g.Tags ?? new List<string>()
             }).ToList() ?? new List<TenorGif>();
             
             Console.WriteLine($"🎬 Found {gifs.Count} GIFs for query: {query}");
@@ -150,26 +151,42 @@ public class TenorGif
 
 public class TenorResponse
 {
+    [JsonPropertyName("results")]
     public List<TenorResult>? Results { get; set; }
 }
 
 public class TenorResult
 {
+    [JsonPropertyName("id")]
     public string Id { get; set; } = "";
+    
+    [JsonPropertyName("title")]
     public string Title { get; set; } = "";
+    
+    [JsonPropertyName("tags")]
     public List<string> Tags { get; set; } = new();
+    
+    [JsonPropertyName("media_formats")]
     public TenorMediaFormats? MediaFormats { get; set; }
 }
 
 public class TenorMediaFormats
 {
+    [JsonPropertyName("gif")]
     public TenorMedia? Gif { get; set; }
+    
+    [JsonPropertyName("tinygif")]
     public TenorMedia? TinyGif { get; set; }
 }
 
 public class TenorMedia
 {
+    [JsonPropertyName("url")]
     public string Url { get; set; } = "";
-    public int Width { get; set; }
-    public int Height { get; set; }
+    
+    [JsonPropertyName("dims")]
+    public int[]? Dims { get; set; }
+    
+    public int Width => Dims?[0] ?? 0;
+    public int Height => Dims?[1] ?? 0;
 }

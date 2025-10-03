@@ -2606,12 +2606,16 @@ public class TelegramBotService
 IMPORTANT: Respond ONLY in Russian language!
 
 Process the answer:
-1. If correct - congratulate and give next question
-2. If wrong - say correct answer and give next question  
-3. If this was the last (10th) question - finish game with congratulations
+1. If correct - start response with ""✅ ПРАВИЛЬНО!"" and give next question
+2. If wrong - start response with ""❌ НЕПРАВИЛЬНО!"" and say correct answer, then give next question  
+3. If this was the last (10th) question - finish game with ""🎉 ИГРА ЗАВЕРШЕНА!""
 4. Follow format: Вопрос: [text] A) [option] B) [option] C) [option] D) [option] Правильный ответ: [letter] - [text]
 
-Remember: ALL responses must be in Russian!";
+Remember: 
+- Start with ✅ ПРАВИЛЬНО! or ❌ НЕПРАВИЛЬНО!
+- ALL responses must be in Russian!
+- Current question: {gameState.CurrentQuestion + 1}/10
+- Wrong answers: {gameState.WrongAnswers}/2";
             
             var aiResponse = await _geminiManager.GenerateResponseWithContextAsync(prompt, chatId);
             
@@ -2629,10 +2633,8 @@ Remember: ALL responses must be in Russian!";
             {
                 gameState.CurrentQuestion++;
                 
-                // Простая логика определения правильности ответа
-                var isCorrect = aiResponse.Contains("правильно") || aiResponse.Contains("верно") || 
-                               aiResponse.Contains("отлично") || aiResponse.Contains("молодец") ||
-                               aiResponse.Contains("да, это") || aiResponse.Contains("именно");
+                // Определяем правильность ответа по началу ответа AI
+                var isCorrect = aiResponse.StartsWith("✅ ПРАВИЛЬНО!") || aiResponse.Contains("✅ ПРАВИЛЬНО!");
                 
                 if (isCorrect)
                 {
@@ -2660,9 +2662,7 @@ Remember: ALL responses must be in Russian!";
             }
             
             // Проверяем ответ AI на завершение игры
-            if (aiResponse.Contains("поздравляю") || aiResponse.Contains("статистика") || 
-                aiResponse.Contains("игра завершена") || aiResponse.Contains("финал") ||
-                aiResponse.Contains("результат") || aiResponse.Contains("завершение"))
+            if (aiResponse.Contains("🎉 ИГРА ЗАВЕРШЕНА!") || aiResponse.Contains("ИГРА ЗАВЕРШЕНА"))
             {
                 shouldEndGame = true;
             }
@@ -2930,6 +2930,9 @@ Start with the first easy question. Remember: everything must be in Russian!";
 
             switch (menuType)
             {
+                case "main":
+                    await SendHelpMessageAsync(chatId);
+                    break;
                 case "git":
                     await ShowGitMenuAsync(chatId, messageId);
                     break;
@@ -3111,17 +3114,11 @@ Start with the first easy question. Remember: everything must be in Russian!";
             },
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/start")
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "menu:main")
             }
         });
 
-        await _botClient.SendTextMessageAsync(
-            chatId: chatId,
-            text: message,
-            parseMode: ParseMode.Markdown,
-            replyMarkup: keyboard,
-            disableNotification: true
-        );
+        await _botClient.EditMessageTextAsync(chatId, messageId, message, parseMode: ParseMode.Markdown, replyMarkup: keyboard);
     }
 
     private async Task ShowGamesMenuAsync(long chatId, int messageId)
@@ -3897,7 +3894,7 @@ help - полный список команд";
             },
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "/help"),
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад", "menu:main"),
             }
         });
 
