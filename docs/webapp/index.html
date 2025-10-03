@@ -336,18 +336,34 @@
                     <main>
                         <!-- controls-sections: visible on mobile, hidden on desktop -->
                         <div class="controls-sections">
-            <!-- AI Status Section -->
+            <!-- AI Section (collapsible) -->
             <div class="section">
-                <div class="ai-status">
-                    <span class="status-indicator" id="ai-status-indicator"></span>
-                    <span id="ai-status-text">Проверка статуса AI...</span>
+                <button class="btn btn-secondary d-flex align-items-center gap-2" data-bs-toggle="collapse" data-bs-target="#aiSection" aria-expanded="true" aria-controls="aiSection">
+                    <span class="material-icons">psychology</span>
+                    <span class="material-icons" id="aiChevron">expand_less</span>
+                </button>
+                <div class="collapse show mt-2" id="aiSection">
+                    <div class="ai-status mb-2">
+                        <span class="status-indicator" id="ai-status-indicator"></span>
+                        <span id="ai-status-text">Проверка статуса AI...</span>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-success d-flex align-items-center justify-content-center" id="start-ai" title="Включить AI"><span class="material-icons">play_arrow</span></button>
+                        <button class="btn btn-danger d-flex align-items-center justify-content-center" id="stop-ai" title="Выключить AI"><span class="material-icons">stop</span></button>
+                        <button class="btn btn-secondary d-flex align-items-center justify-content-center" id="ai-stats" title="Статус AI"><span class="material-icons">insights</span></button>
+                        <button class="btn btn-secondary d-flex align-items-center justify-content-center" id="clear-context" title="Очистить контекст"><span class="material-icons">cleaning_services</span></button>
+                    </div>
                 </div>
             </div>
 
-            <!-- Stats Section -->
+            <!-- Stats Section (collapsible) -->
             <div class="section">
-                <div class="section-title d-flex align-items-center gap-1"><span class="material-icons">bar_chart</span> Статистика</div>
-                <div class="stats-grid">
+                <button class="btn btn-secondary d-flex align-items-center gap-2" data-bs-toggle="collapse" data-bs-target="#statsSection" aria-expanded="true" aria-controls="statsSection">
+                    <span class="material-icons">bar_chart</span>
+                    <span class="material-icons" id="statsChevron">expand_less</span>
+                </button>
+                <div class="collapse show mt-2" id="statsSection">
+                    <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-value" id="total-commits">-</div>
                         <div class="stat-label">Коммиты</div>
@@ -364,28 +380,22 @@
                         <div class="stat-value" id="ai-requests">-</div>
                         <div class="stat-label">AI запросы</div>
                     </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- AI Controls Section -->
+            <!-- Bot Controls Section (collapsible) -->
             <div class="section">
-                <div class="section-title d-flex align-items-center gap-1"><span class="material-icons">smart_toy</span> AI Ассистент</div>
-                <div class="button-grid">
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-success flex-grow-1 d-flex align-items-center gap-1" id="start-ai"><span class="material-icons">play_arrow</span> Включить AI</button>
-                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="start-ai"><span class="material-icons">info</span></button>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-danger flex-grow-1 d-flex align-items-center gap-1" id="stop-ai"><span class="material-icons">stop</span> Выключить AI</button>
-                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="stop-ai"><span class="material-icons">info</span></button>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="ai-stats"><span class="material-icons">insights</span> Статус AI</button>
-                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="ai-stats"><span class="material-icons">info</span></button>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="clear-context"><span class="material-icons">cleaning_services</span> Очистить контекст</button>
-                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="clear-context"><span class="material-icons">info</span></button>
+                <button class="btn btn-secondary d-flex align-items-center gap-2" data-bs-toggle="collapse" data-bs-target="#botSection" aria-expanded="true" aria-controls="botSection">
+                    <span class="material-icons">dashboard_customize</span>
+                    <span class="material-icons" id="botChevron">expand_less</span>
+                </button>
+                <div class="collapse show mt-2" id="botSection">
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-secondary d-flex align-items-center justify-content-center" id="bot-status" title="Статус бота"><span class="material-icons">monitor_heart</span></button>
+                        <button class="btn btn-secondary d-flex align-items-center justify-content-center" id="git-stats" title="Git статистика"><span class="material-icons">query_stats</span></button>
+                        <button class="btn btn-secondary d-flex align-items-center justify-content-center" id="recent-commits" title="Последние коммиты"><span class="material-icons">update</span></button>
+                        <button class="btn btn-secondary d-flex align-items-center justify-content-center" id="leaderboard" title="Таблица лидеров"><span class="material-icons">emoji_events</span></button>
                     </div>
                 </div>
             </div>
@@ -413,45 +423,45 @@
                 </div>
             </div>
 
-            <!-- Games Section -->
+            <!-- Games Section (collapsible) -->
             <div class="section">
-                <div class="section-title d-flex align-items-center gap-1"><span class="material-icons">sports_esports</span> Игры</div>
-                <div class="button-grid">
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="meme-game"><span class="material-icons">mood</span> Мемы</button>
-                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="meme-game"><span class="material-icons">info</span></button>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="lol-game"><span class="material-icons">sports_martial_arts</span> League of Legends</button>
-                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="lol-game"><span class="material-icons">info</span></button>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="programming-game"><span class="material-icons">terminal</span> Программирование</button>
-                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="programming-game"><span class="material-icons">info</span></button>
+                <button class="btn btn-secondary d-flex align-items-center gap-2" data-bs-toggle="collapse" data-bs-target="#gamesSection" aria-expanded="false" aria-controls="gamesSection">
+                    <span class="material-icons">sports_esports</span>
+                    <span class="material-icons" id="gamesChevron">expand_more</span>
+                </button>
+                <div class="collapse mt-2" id="gamesSection">
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-secondary d-flex align-items-center justify-content-center" id="meme-game" title="Игра Мемы"><span class="material-icons">mood</span></button>
+                        <button class="btn btn-secondary d-flex align-items-center justify-content-center" id="lol-game" title="Игра LoL"><span class="material-icons">sports_martial_arts</span></button>
+                        <button class="btn btn-secondary d-flex align-items-center justify-content-center" id="programming-game" title="Игра Программирование"><span class="material-icons">terminal</span></button>
                     </div>
                 </div>
             </div>
 
-            <!-- Cursor Section -->
+            <!-- Cursor Section (collapsible) -->
             <div class="section">
-                <div class="section-title d-flex align-items-center gap-1"><span class="material-icons">code</span> Cursor IDE</div>
-                <div class="button-grid">
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="cursor-links"><span class="material-icons">link</span> Диплинки Cursor</button>
-                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="cursor-links"><span class="material-icons">info</span></button>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="cursor-help"><span class="material-icons">help_outline</span> Помощь Cursor</button>
-                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="cursor-help"><span class="material-icons">info</span></button>
+                <button class="btn btn-secondary d-flex align-items-center gap-2" data-bs-toggle="collapse" data-bs-target="#cursorSection" aria-expanded="false" aria-controls="cursorSection">
+                    <span class="material-icons">code</span>
+                    <span class="material-icons" id="cursorChevron">expand_more</span>
+                </button>
+                <div class="collapse mt-2" id="cursorSection">
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-secondary d-flex align-items-center justify-content-center" id="cursor-links" title="Диплинки Cursor"><span class="material-icons">link</span></button>
+                        <button class="btn btn-secondary d-flex align-items-center justify-content-center" id="cursor-help" title="Помощь Cursor"><span class="material-icons">help_outline</span></button>
                     </div>
                 </div>
             </div>
 
-            <!-- Recent Commits Section -->
+            <!-- Recent Commits Section (collapsible) -->
             <div class="section">
-                <div class="section-title d-flex align-items-center gap-1"><span class="material-icons">history_edu</span> Последние коммиты</div>
-                <div class="recent-commits" id="recent-commits-list">
-                    <div class="loading">Загрузка коммитов...</div>
+                <button class="btn btn-secondary d-flex align-items-center gap-2" data-bs-toggle="collapse" data-bs-target="#commitsSection" aria-expanded="false" aria-controls="commitsSection">
+                    <span class="material-icons">history_edu</span>
+                    <span class="material-icons" id="commitsChevron">expand_more</span>
+                </button>
+                <div class="collapse mt-2" id="commitsSection">
+                    <div class="recent-commits" id="recent-commits-list">
+                        <div class="loading">Загрузка коммитов...</div>
+                    </div>
                 </div>
             </div>
                     </div>
@@ -1009,17 +1019,19 @@
         document.addEventListener('DOMContentLoaded', () => {
             // Add navigation to header
             const header = document.querySelector('.header');
-            const navButtons = document.createElement('div');
-            navButtons.className = 'd-flex gap-2';
-            navButtons.innerHTML = `
-                <button class="btn btn-secondary d-flex align-items-center gap-1" onclick="showPage('dashboard')">
-                    <span class="material-icons">dashboard</span> Дашборд
-                </button>
-                <button class="btn btn-secondary d-flex align-items-center gap-1" onclick="showPage('cursor')">
-                    <span class="material-icons">code</span> Cursor
-                </button>
-            `;
-            header.appendChild(navButtons);
+            if (header) {
+                const navButtons = document.createElement('div');
+                navButtons.className = 'd-flex gap-2';
+                navButtons.innerHTML = `
+                    <button class="btn btn-secondary d-flex align-items-center gap-1" onclick="showPage('dashboard')" title="Дашборд">
+                        <span class="material-icons">dashboard</span>
+                    </button>
+                    <button class="btn btn-secondary d-flex align-items-center gap-1" onclick="showPage('cursor')" title="Cursor">
+                        <span class="material-icons">code</span>
+                    </button>
+                `;
+                header.appendChild(navButtons);
+            }
         });
 
         // Cursor deeplink generator
@@ -1112,6 +1124,23 @@
 
         // Initialize app when page loads
         init();
+
+        // Chevron toggle
+        const chevrons = [
+            { id: 'aiSection', icon: 'aiChevron' },
+            { id: 'statsSection', icon: 'statsChevron' },
+            { id: 'botSection', icon: 'botChevron' },
+            { id: 'gamesSection', icon: 'gamesChevron' },
+            { id: 'commitsSection', icon: 'commitsChevron' },
+            { id: 'cursorSection', icon: 'cursorChevron' },
+        ];
+        chevrons.forEach(({ id, icon }) => {
+            const el = document.getElementById(id);
+            const ic = document.getElementById(icon);
+            if (!el || !ic) return;
+            el.addEventListener('shown.bs.collapse', () => { ic.textContent = 'expand_less'; });
+            el.addEventListener('hidden.bs.collapse', () => { ic.textContent = 'expand_more'; });
+        });
     </script>
 </body>
 </html>
