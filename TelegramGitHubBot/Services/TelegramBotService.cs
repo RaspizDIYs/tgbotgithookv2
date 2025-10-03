@@ -2556,7 +2556,7 @@ public class TelegramBotService
             StartTime = DateTime.UtcNow
         };
 
-        var gameName = GamePrompts.GameNames[gameType];
+        var gameName = GamePrompts.GetGameName(gameType);
         var prompt = GamePrompts.GetPromptWithDifficulty(gameType, _gameStates[chatId].Difficulty);
 
         try
@@ -2578,7 +2578,7 @@ public class TelegramBotService
         if (_gameStates.ContainsKey(chatId) && _gameStates[chatId].IsActive)
         {
             var gameState = _gameStates[chatId];
-            var gameName = GamePrompts.GameNames[gameState.GameType];
+            var gameName = GamePrompts.GetGameName(gameState.GameType);
             
             await _botClient.SendTextMessageAsync(chatId, $"🛑 **{gameName} остановлена!**\n\nСтатистика:\n✅ Правильных: {gameState.CorrectAnswers}\n❌ Неправильных: {gameState.WrongAnswers}", disableNotification: true);
             
@@ -2603,7 +2603,7 @@ public class TelegramBotService
             return;
 
         var gameState = _gameStates[chatId];
-        var gameName = GamePrompts.GameNames[gameState.GameType];
+        var gameName = GamePrompts.GetGameName(gameState.GameType);
 
         try
         {
@@ -3827,7 +3827,7 @@ help - полный список команд";
 
     private async Task ShowDifficultyMenuAsync(long chatId, string gameType)
     {
-        var gameName = GamePrompts.GameNames[gameType];
+        var gameName = GamePrompts.GetGameName(gameType);
         var message = $"🎮 **{gameName}**\n\nВыберите сложность:";
 
         var keyboard = new InlineKeyboardMarkup(new[]
@@ -4347,7 +4347,7 @@ help - полный список команд";
             StartTime = DateTime.UtcNow
         };
 
-        var gameName = GamePrompts.GameNames[gameType];
+        var gameName = GamePrompts.GetGameName(gameType);
         var difficultyName = GetDifficultyName(difficulty);
         
         await _botClient.SendTextMessageAsync(chatId, $"🎮 **{gameName}** ({difficultyName})\n\nИгра началась! Отвечайте на вопросы.", disableNotification: true);

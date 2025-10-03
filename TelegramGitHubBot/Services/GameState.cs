@@ -15,11 +15,34 @@ public class GameState
     public int CorrectAnswerIndex { get; set; } = 0;
 }
 
-public class GamePrompts
+public abstract class BaseGamePrompt
 {
-    public static readonly Dictionary<string, string> Prompts = new()
+    public abstract string GameType { get; }
+    public abstract string GameName { get; }
+    
+    public abstract string GetPrompt(string difficulty);
+    
+    protected string GetDifficultyDescription(string difficulty)
     {
-        ["meme"] = @"You are the host of a ""What? Where? When?"" quiz game about Russian internet memes.
+        return difficulty switch
+        {
+            "easy" => "Легкие вопросы - базовые знания, популярные мемы/факты",
+            "medium" => "Средние вопросы - требуют некоторого опыта",
+            "hard" => "Сложные вопросы - для опытных игроков",
+            "expert" => "Экспертные вопросы - очень сложные, для знатоков",
+            _ => "Средние вопросы - требуют некоторого опыта"
+        };
+    }
+}
+
+public class MemeGamePrompt : BaseGamePrompt
+{
+    public override string GameType => "meme";
+    public override string GameName => "Что? Где? Мем?";
+    
+    public override string GetPrompt(string difficulty)
+    {
+        var basePrompt = @"You are the host of a ""What? Where? When?"" quiz game about Russian internet memes.
 
 IMPORTANT: All questions, answers, and responses must be in RUSSIAN language only!
 
@@ -42,9 +65,23 @@ D) [option 4]
 
 CRITICAL: Do NOT include the correct answer in the question text itself!
 
-Start with the first question. Remember: everything must be in Russian!",
+Start with the first question. Remember: everything must be in Russian!";
 
-        ["lol"] = @"You are the host of a ""What? Where? When?"" quiz game about League of Legends.
+        return $@"{basePrompt}
+
+CURRENT DIFFICULTY LEVEL: {GetDifficultyDescription(difficulty)}
+Adjust question complexity accordingly while staying strictly within the topic of Russian internet memes.";
+    }
+}
+
+public class LoLGamePrompt : BaseGamePrompt
+{
+    public override string GameType => "lol";
+    public override string GameName => "Что? Где? Лол?";
+    
+    public override string GetPrompt(string difficulty)
+    {
+        var basePrompt = @"You are the host of a ""What? Where? When?"" quiz game about League of Legends.
 
 IMPORTANT: All questions, answers, and responses must be in RUSSIAN language only!
 
@@ -66,9 +103,23 @@ D) [option 4]
 
 CRITICAL: Do NOT include the correct answer in the question text itself!
 
-Start with the first question. Remember: everything must be in Russian!",
+Start with the first question. Remember: everything must be in Russian!";
 
-        ["programming"] = @"You are the host of a ""What? Where? When?"" quiz game about programming.
+        return $@"{basePrompt}
+
+CURRENT DIFFICULTY LEVEL: {GetDifficultyDescription(difficulty)}
+Adjust question complexity accordingly while staying strictly within the topic of League of Legends.";
+    }
+}
+
+public class ProgrammingGamePrompt : BaseGamePrompt
+{
+    public override string GameType => "programming";
+    public override string GameName => "If? Else? True?";
+    
+    public override string GetPrompt(string difficulty)
+    {
+        var basePrompt = @"You are the host of a ""What? Where? When?"" quiz game about programming.
 
 IMPORTANT: All questions, answers, and responses must be in RUSSIAN language only!
 
@@ -90,37 +141,35 @@ D) [option 4]
 
 CRITICAL: Do NOT include the correct answer in the question text itself!
 
-Start with the first question. Remember: everything must be in Russian!"
-    };
+Start with the first question. Remember: everything must be in Russian!";
 
-    public static readonly Dictionary<string, string> GameNames = new()
+        return $@"{basePrompt}
+
+CURRENT DIFFICULTY LEVEL: {GetDifficultyDescription(difficulty)}
+Adjust question complexity accordingly while staying strictly within the topic of programming.";
+    }
+}
+
+public class GamePrompts
+{
+    private static readonly Dictionary<string, BaseGamePrompt> _prompts = new()
     {
-        ["meme"] = "Что? Где? Мем?",
-        ["lol"] = "Что? Где? Лол?",
-        ["programming"] = "If? Else? True?"
+        ["meme"] = new MemeGamePrompt(),
+        ["lol"] = new LoLGamePrompt(),
+        ["programming"] = new ProgrammingGamePrompt()
     };
 
     public static string GetPromptWithDifficulty(string gameType, string difficulty)
     {
-        var basePrompt = Prompts[gameType];
-        var difficultyDescription = GetDifficultyDescription(difficulty);
-        
-        // Добавляем информацию о сложности в начало промпта
-        return $@"{basePrompt}
-
-CURRENT DIFFICULTY LEVEL: {difficultyDescription}
-Adjust question complexity accordingly while staying strictly within the topic.";
+        return _prompts.TryGetValue(gameType, out var prompt) 
+            ? prompt.GetPrompt(difficulty) 
+            : "";
     }
 
-    private static string GetDifficultyDescription(string difficulty)
+    public static string GetGameName(string gameType)
     {
-        return difficulty switch
-        {
-            "easy" => "Легкие вопросы - базовые знания, популярные мемы/факты",
-            "medium" => "Средние вопросы - требуют некоторого опыта",
-            "hard" => "Сложные вопросы - для опытных игроков",
-            "expert" => "Экспертные вопросы - очень сложные, для знатоков",
-            _ => "Средние вопросы - требуют некоторого опыта"
-        };
+        return _prompts.TryGetValue(gameType, out var prompt) 
+            ? prompt.GameName 
+            : "Неизвестная игра";
     }
 }
