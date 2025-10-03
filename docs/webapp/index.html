@@ -41,26 +41,15 @@
             padding: 16px;
         }
 
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 24px;
-            padding: 8px 0 16px 0;
+        /* Navbar overrides */
+        .navbar {
             border-bottom: 1px solid var(--app-secondary);
+            background: var(--app-bg) !important;
         }
-
-        .header h1 {
-            font-size: 24px;
-            margin-bottom: 8px;
-            color: var(--tg-theme-text-color, #000000);
+        .navbar .navbar-brand, .navbar .nav-link {
+            color: var(--app-text) !important;
         }
-
-        .header p {
-            color: var(--tg-theme-hint-color, #666666);
-            font-size: 14px;
-        }
+        .navbar .nav-link.active { font-weight: 600; }
 
         .stats-grid {
             display: grid;
@@ -70,11 +59,11 @@
         }
 
         .stat-card {
-            background: var(--tg-theme-secondary-bg-color, #f8f9fa);
+            background: var(--app-secondary);
             border-radius: 12px;
             padding: 16px;
             text-align: center;
-            border: 1px solid var(--tg-theme-hint-color, #e0e0e0);
+            border: 1px solid var(--app-secondary);
         }
 
         .stat-value {
@@ -132,11 +121,7 @@
             transform: translateY(0);
         }
 
-        .btn-secondary {
-            background: var(--tg-theme-secondary-bg-color, #f8f9fa);
-            color: var(--tg-theme-text-color, #000000);
-            border: 1px solid var(--tg-theme-hint-color, #e0e0e0);
-        }
+        .btn-secondary { background: var(--app-secondary); color: var(--app-text); border: 1px solid var(--app-secondary); }
 
         .btn-danger {
             background: #ff4444;
@@ -243,15 +228,9 @@
         }
 
         /* Desktop layout: sidebar + main */
-        .layout {
-            display: block;
-        }
-        .sidebar {
-            display: none;
-        }
-        .chat-panel {
-            display: none;
-        }
+        .layout { display: block; }
+        .sidebar { display: none; }
+        .chat-panel { display: grid; grid-template-rows: 1fr auto; height: 60dvh; border: 1px solid var(--app-secondary); border-radius: 12px; overflow: hidden; }
         @media (min-width: 992px) {
             .layout {
                 display: grid;
@@ -269,7 +248,7 @@
                 border-right: 1px solid var(--app-secondary);
             }
             .controls-sections { display: none; }
-            .chat-panel { display: grid; grid-template-rows: 1fr auto; height: calc(100dvh - 160px); border: 1px solid var(--app-secondary); border-radius: 12px; overflow: hidden; }
+            .chat-panel { height: calc(100dvh - 160px); }
             .chat-messages { padding: 12px; overflow-y: auto; background: var(--app-bg); }
             .chat-input { padding: 12px; background: var(--app-secondary); display: flex; gap: 8px; align-items: center; }
             .chat-input textarea { flex: 1; resize: none; height: 48px; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; }
@@ -288,19 +267,32 @@
                 grid-template-columns: 1fr;
             }
         }
+        /* Icon color support */
+        .material-icons { color: var(--app-text); opacity: 0.9; }
+        :root[data-theme="dark"] .material-icons { color: #e2e8f0; opacity: 0.95; }
+
+        /* Card polish */
+        .card { background: var(--app-bg); border-color: var(--app-secondary); }
+        .card-header { background: var(--app-bg); border-bottom-color: var(--app-secondary); }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <div>
-                <h1 class="m-0 d-flex align-items-center gap-2"><span class="material-icons">smart_toy</span> GitHub Bot Dashboard</h1>
-                <p class="m-0">Управление ботом и мониторинг репозитория</p>
+        <nav class="navbar navbar-expand-lg">
+            <div class="container-fluid">
+                <a class="navbar-brand d-flex align-items-center gap-2" href="#" onclick="showPage('dashboard')"><span class="material-icons">smart_toy</span> GitHub Bot</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                        <li class="nav-item"><a class="nav-link active" aria-current="page" href="#" onclick="showPage('dashboard')"><span class="material-icons">dashboard</span></a></li>
+                        <li class="nav-item"><a class="nav-link" href="#" onclick="showPage('cursor')"><span class="material-icons">code</span></a></li>
+                    </ul>
+                    <button id="themeToggle" class="btn btn-secondary d-flex align-items-center gap-1" title="Переключить тему"><span class="material-icons">dark_mode</span><span>Тема</span></button>
+                </div>
             </div>
-            <div class="d-flex align-items-center gap-2">
-                <button id="themeToggle" class="btn btn-secondary d-flex align-items-center gap-1" title="Переключить тему"><span class="material-icons">dark_mode</span><span>Тема</span></button>
-            </div>
-        </div>
+        </nav>
 
         <div id="loading" class="loading">
             Загрузка данных...
