@@ -177,7 +177,14 @@ public class TelegramBotService
             if (cleanCommand == "/glaistart")
             {
                 _geminiMode[chatId] = true;
-                await SendMessageWithBackButtonAsync(chatId, "🤖 **Режим Gemini активирован!**\n\nТеперь я буду отвечать через AI модель.");
+                
+                var aiMessage = "🤖 **Режим Gemini активирован!**\n\nТеперь я буду отвечать через AI модель.";
+                var inlineKeyboard = new InlineKeyboardMarkup(new[]
+                {
+                    new[] { InlineKeyboardButton.WithCallbackData("⏹️ Остановить AI", "/glaistop") }
+                });
+                
+                await _botClient.SendTextMessageAsync(chatId, aiMessage, parseMode: ParseMode.Markdown, replyMarkup: inlineKeyboard, disableNotification: true);
                 return;
             }
             else if (cleanCommand == "/glaistop")
@@ -189,7 +196,14 @@ public class TelegramBotService
                 }
                 
                 _geminiMode[chatId] = false;
-                await SendMessageWithBackButtonAsync(chatId, "🛑 **Режим Gemini деактивирован.**\n\nВозвращаюсь к обычным командам.");
+                
+                var stopMessage = "🛑 **Режим Gemini деактивирован.**\n\nВозвращаюсь к обычным командам.";
+                var inlineKeyboard = new InlineKeyboardMarkup(new[]
+                {
+                    new[] { InlineKeyboardButton.WithCallbackData("▶️ Включить AI", "/glaistart") }
+                });
+                
+                await _botClient.SendTextMessageAsync(chatId, stopMessage, parseMode: ParseMode.Markdown, replyMarkup: inlineKeyboard, disableNotification: true);
                 return;
             }
             else if (cleanCommand == "/glaistats")
@@ -1064,8 +1078,6 @@ public class TelegramBotService
             if (data.StartsWith("cd:") || data.StartsWith("commit_details:"))
             {
                 Console.WriteLine("📋 Processing commit details request");
-                // Удаляем текущее сообщение
-                await DeleteMessageAsync(chatId, messageId);
                 // Обрабатываем запрос деталей коммита
                 await HandleCommitDetailsCallbackAsync(chatId, data);
             }
@@ -1112,9 +1124,6 @@ public class TelegramBotService
                 PushNavigation(chatId, data);
                 
                 await HandleSubmenuAsync(chatId, messageId, data);
-                
-                // Удаляем предыдущее сообщение
-                await DeleteMessageAsync(chatId, messageId);
             }
             else if (data.StartsWith("difficulty:"))
             {
@@ -1148,13 +1157,11 @@ public class TelegramBotService
                     if (previousCommand != null)
                     {
                         await HandleCommandAsync(chatId, previousCommand, callbackQuery.From?.Username);
-                        await DeleteMessageAsync(chatId, messageId);
                     }
                     else
                     {
                         // Если нет предыдущего меню, возвращаемся в help
                         await SendHelpMessageAsync(chatId);
-                        await DeleteMessageAsync(chatId, messageId);
                     }
                 }
                 else
@@ -1164,9 +1171,6 @@ public class TelegramBotService
                     
                     // Обрабатываем команду из callback data
                     await HandleCommandAsync(chatId, data, callbackQuery.From?.Username);
-                    
-                    // Удаляем предыдущее сообщение
-                    await DeleteMessageAsync(chatId, messageId);
                 }
             }
         }
@@ -1208,11 +1212,7 @@ public class TelegramBotService
 
         try
         {
-            if (messageIdToEdit.HasValue && messageIdToEdit.Value != 0)
-            {
-                // Удаляем предыдущее сообщение, чтобы избежать ограничений редактирования media
-                await DeleteMessageAsync(chatId, messageIdToEdit.Value);
-            }
+            // Убираем удаление предыдущих сообщений для корректной работы
 
             var url = a.GifUrl?.Trim() ?? string.Empty;
             try
@@ -1263,50 +1263,7 @@ public class TelegramBotService
         }
     }
 
-    private async Task DeleteMessageAsync(long chatId, int messageId)
-    {
-        try
-        {
-            await _botClient.DeleteMessageAsync(chatId, messageId);
-            Console.WriteLine($"🗑️ Deleted message {messageId} from chat {chatId}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"❌ Failed to delete message {messageId}: {ex.Message}");
-        }
-    }
 
-    private bool ShouldDeletePreviousMessage(string callbackData)
-    {
-        // Удаляем предыдущее сообщение при нажатии кнопок навигации
-        var deleteCommands = new[]
-        {
-            "/start",           // Главное меню
-            "/help",            // Справка
-            "/info",            // Информация
-            "/settings",        // Настройки
-            "menu:git",         // Git меню
-            "menu:stats",       // Stats меню
-            "menu:gemini",      // Gemini AI меню
-            "menu:games",       // Игры меню
-            "menu:gif",         // GIF меню
-            "menu:cursor",      // Cursor меню
-            // GIF команды
-            "/gifsearch",       // Поиск GIF
-            "/gifrandom",       // Случайный GIF
-            "/giftext",         // Добавить текст на GIF
-            "/gifsettings",     // Настройки GIF
-            // Gemini команды
-            "/glaistart",       // Включить AI
-            "/glaistop",        // Выключить AI
-            "/glaistats",       // Статус агентов
-            "/glaicurrent",     // Текущий агент
-            "/glaiswitch",      // Переключить агента
-            "/glaiclear"        // Очистить контекст
-        };
-
-        return deleteCommands.Contains(callbackData);
-    }
 
     private async Task RestorePushMessageAsync(long chatId, string commitSha, string repoName)
     {
@@ -2118,8 +2075,7 @@ public class TelegramBotService
             var action = parts[0];
             var branch = parts[1];
 
-            // Удаляем сообщение с выбором ветки
-            await DeleteMessageAsync(chatId, messageId);
+            // Убираем удаление сообщений для корректной работы
 
             switch (action)
             {
@@ -2264,8 +2220,7 @@ public class TelegramBotService
 
             var weekOffset = int.Parse(parts[1]);
             
-            // Удаляем сообщение с выбором недели
-            await DeleteMessageAsync(chatId, messageId);
+            // Убираем удаление сообщений для корректной работы
 
             var weekStats = await _gitHubService.GetWeeklyStatsAsync(weekOffset);
 
@@ -4001,8 +3956,7 @@ help - полный список команд";
                 var gameType = parts[1];
                 var difficulty = parts[2];
                 
-                // Удаляем предыдущее сообщение
-                await DeleteMessageAsync(chatId, messageId);
+                // Убираем удаление сообщений для корректной работы
                 
                 // Запускаем игру с выбранной сложностью
                 await StartGameWithDifficultyAsync(chatId, gameType, difficulty);
@@ -4482,8 +4436,8 @@ help - полный список команд";
             var gifInstruction = ExtractGifInstruction(aiResponse);
             var cleanResponse = RemoveGifInstruction(aiResponse);
 
-            // Отправляем текстовый ответ
-            await SendMessageWithBackButtonAsync(chatId, cleanResponse);
+            // Отправляем текстовый ответ без кнопки "Назад" в режиме AI
+            await _botClient.SendTextMessageAsync(chatId, cleanResponse, disableNotification: true);
 
             // Если AI указал, что нужно отправить GIF, отправляем его
             if (!string.IsNullOrEmpty(gifInstruction))
@@ -4494,8 +4448,8 @@ help - полный список команд";
         catch (Exception ex)
         {
             Console.WriteLine($"❌ Error handling AI response with GIF: {ex.Message}");
-            // Отправляем хотя бы текстовый ответ
-            await SendMessageWithBackButtonAsync(chatId, aiResponse);
+            // Отправляем хотя бы текстовый ответ без кнопки "Назад" в режиме AI
+            await _botClient.SendTextMessageAsync(chatId, aiResponse, disableNotification: true);
         }
     }
 
@@ -4589,14 +4543,9 @@ help - полный список команд";
             {
                 var randomGif = gifs[_random.Next(gifs.Count)];
                 
-                // Создаем кнопку "Назад" для GIF
-                var inlineKeyboard = new InlineKeyboardMarkup(new[]
-                {
-                    new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") }
-                });
-                
+                // В режиме AI не добавляем кнопку "Назад" к GIF
                 await _botClient.SendAnimationAsync(chatId, InputFile.FromUri(randomGif.Url), 
-                    caption: $"🎬 {emotion}: {randomGif.Title}", replyMarkup: inlineKeyboard, disableNotification: true);
+                    caption: $"🎬 {emotion}: {randomGif.Title}", disableNotification: true);
             }
         }
         catch (Exception ex)

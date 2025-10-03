@@ -119,6 +119,7 @@ public class TenorService
     {
         var emotionQueries = emotion.ToLower() switch
         {
+            // Основные эмоции
             "злость" or "злой" or "angry" => new[] { "angry", "mad", "rage", "furious" },
             "счастье" or "счастливый" or "happy" => new[] { "happy", "joy", "celebration", "excited" },
             "грусть" or "грустный" or "sad" => new[] { "sad", "crying", "depressed", "melancholy" },
@@ -131,6 +132,21 @@ public class TenorService
             "оффтоп" or "offtopic" => new[] { "random", "funny", "meme", "reaction" },
             "фол" or "follow" or "support" => new[] { "support", "help", "teamwork", "friendship" },
             "программирование" or "programming" or "код" or "code" => new[] { "programming", "coding", "computer", "tech" },
+            
+            // Дополнительные категории для разнообразия
+            "танцы" or "dance" => new[] { "dance", "dancing", "party", "celebration" },
+            "еда" or "food" => new[] { "food", "eating", "cooking", "hungry" },
+            "спорт" or "sport" => new[] { "sport", "fitness", "gym", "exercise" },
+            "музыка" or "music" => new[] { "music", "singing", "concert", "dancing" },
+            "путешествия" or "travel" => new[] { "travel", "vacation", "adventure", "trip" },
+            "животные" or "animals" => new[] { "cute animals", "cats", "dogs", "pets" },
+            "природа" or "nature" => new[] { "nature", "weather", "landscape", "outdoor" },
+            "технологии" or "technology" => new[] { "technology", "gadgets", "computer", "internet" },
+            "игры" or "games" => new[] { "gaming", "video games", "fun", "play" },
+            "кино" or "movie" => new[] { "movie", "cinema", "film", "actor" },
+            "книги" or "books" => new[] { "books", "reading", "study", "knowledge" },
+            "искусство" or "art" => new[] { "art", "creative", "drawing", "design" },
+            
             _ => new[] { emotion, "meme", "reaction" }
         };
 
