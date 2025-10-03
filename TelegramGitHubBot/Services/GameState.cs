@@ -4,6 +4,7 @@ public class GameState
 {
     public bool IsActive { get; set; } = false;
     public string GameType { get; set; } = ""; // "meme", "lol", "programming"
+    public string Difficulty { get; set; } = "medium"; // "easy", "medium", "hard", "expert"
     public int CurrentQuestion { get; set; } = 0;
     public int CorrectAnswers { get; set; } = 0;
     public int WrongAnswers { get; set; } = 0;
@@ -88,4 +89,27 @@ Start with the first easy question. Remember: everything must be in Russian!"
         ["lol"] = "Что? Где? Лол?",
         ["programming"] = "If? Else? True?"
     };
+
+    public static string GetPromptWithDifficulty(string gameType, string difficulty)
+    {
+        var basePrompt = Prompts[gameType];
+        var difficultyDescription = GetDifficultyDescription(difficulty);
+        
+        return basePrompt.Replace(
+            "Difficulty progression: 3 easy → 3 medium → 3 hard → 1 very hard",
+            $"Difficulty level: {difficultyDescription}"
+        );
+    }
+
+    private static string GetDifficultyDescription(string difficulty)
+    {
+        return difficulty switch
+        {
+            "easy" => "Легкие вопросы - базовые знания, популярные мемы/факты",
+            "medium" => "Средние вопросы - требуют некоторого опыта",
+            "hard" => "Сложные вопросы - для опытных игроков",
+            "expert" => "Экспертные вопросы - очень сложные, для знатоков",
+            _ => "Средние вопросы - требуют некоторого опыта"
+        };
+    }
 }

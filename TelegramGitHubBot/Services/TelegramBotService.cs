@@ -128,13 +128,13 @@ public class TelegramBotService
             try { await _botClient.SendTextMessageAsync(chatId, userMsg, parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true); } catch {}
         }
 
-        // Детектор мата (простые русские шаблоны)
-        if (ContainsProfanity(text))
-        {
-            var mention = !string.IsNullOrWhiteSpace(fromUsername) ? $"@{fromUsername}" : $"id:{fromId}";
-            var warn = $"Вы открываете Скверну! {mention} СКВЕРНОСЛОВ!";
-            try { await _botClient.SendTextMessageAsync(chatId, warn, parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true); } catch {}
-        }
+        // Детектор мата (простые русские шаблоны) - убрано постоянное сообщение
+        // if (ContainsProfanity(text))
+        // {
+        //     var mention = !string.IsNullOrWhiteSpace(fromUsername) ? $"@{fromUsername}" : $"id:{fromId}";
+        //     var warn = $"Вы открываете Скверну! {mention} СКВЕРНОСЛОВ!";
+        //     try { await _botClient.SendTextMessageAsync(chatId, warn, parseMode: ParseMode.Markdown, disableWebPagePreview: true, disableNotification: true); } catch {}
+        // }
 
         // Проверяем матные слова во всех сообщениях
         if (message.From != null)
@@ -191,17 +191,17 @@ public class TelegramBotService
             }
             else if (cleanCommand == "/gamememe")
             {
-                await StartGameAsync(chatId, "meme");
+                await ShowDifficultyMenuAsync(chatId, "meme");
                 return;
             }
             else if (cleanCommand == "/gamelol")
             {
-                await StartGameAsync(chatId, "lol");
+                await ShowDifficultyMenuAsync(chatId, "lol");
                 return;
             }
             else if (cleanCommand == "/gameprogramming")
             {
-                await StartGameAsync(chatId, "programming");
+                await ShowDifficultyMenuAsync(chatId, "programming");
                 return;
             }
             else if (cleanCommand == "/gamestop")
@@ -928,6 +928,11 @@ public class TelegramBotService
             {
                 Console.WriteLine($"📂 Processing submenu: {data}");
                 await HandleSubmenuAsync(chatId, messageId, data);
+            }
+            else if (data.StartsWith("difficulty:"))
+            {
+                Console.WriteLine($"🎯 Processing difficulty selection: {data}");
+                await HandleDifficultySelectionAsync(chatId, messageId, data);
             }
             else if (data.StartsWith("copy_deeplink:"))
             {
@@ -2448,6 +2453,7 @@ public class TelegramBotService
         {
             IsActive = true,
             GameType = gameType,
+            Difficulty = "medium", // По умолчанию средняя сложность
             CurrentQuestion = 0,
             CorrectAnswers = 0,
             WrongAnswers = 0,
@@ -2456,7 +2462,7 @@ public class TelegramBotService
         };
 
         var gameName = GamePrompts.GameNames[gameType];
-        var prompt = GamePrompts.Prompts[gameType];
+        var prompt = GamePrompts.GetPromptWithDifficulty(gameType, _gameStates[chatId].Difficulty);
 
         try
         {
@@ -2482,6 +2488,13 @@ public class TelegramBotService
             await _botClient.SendTextMessageAsync(chatId, $"🛑 **{gameName} остановлена!**\n\nСтатистика:\n✅ Правильных: {gameState.CorrectAnswers}\n❌ Неправильных: {gameState.WrongAnswers}", disableNotification: true);
             
             _gameStates[chatId].IsActive = false;
+            
+            // Автоматически отключаем AI режим после окончания игры
+            if (_geminiMode.ContainsKey(chatId) && _geminiMode[chatId])
+            {
+                _geminiMode[chatId] = false;
+                await _botClient.SendTextMessageAsync(chatId, "🤖 **AI режим автоматически отключен после окончания игры!**", disableNotification: true);
+            }
         }
         else
         {
@@ -2522,6 +2535,13 @@ Remember: ALL responses must be in Russian!";
             if (aiResponse.Contains("поздравляю") || aiResponse.Contains("статистика") || aiResponse.Contains("игра завершена"))
             {
                 _gameStates[chatId].IsActive = false;
+                
+                // Автоматически отключаем AI режим после окончания игры
+                if (_geminiMode.ContainsKey(chatId) && _geminiMode[chatId])
+                {
+                    _geminiMode[chatId] = false;
+                    await _botClient.SendTextMessageAsync(chatId, "🤖 **AI режим автоматически отключен после окончания игры!**", disableNotification: true);
+                }
             }
         }
         catch (Exception ex)
@@ -3644,5 +3664,101 @@ help - полный список команд";
             counter++;
         }
         return $"{number:n1} {suffixes[counter]}";
+    }
+
+    private async Task ShowDifficultyMenuAsync(long chatId, string gameType)
+    {
+        var gameName = GamePrompts.GameNames[gameType];
+        var message = $"🎮 **{gameName}**\n\nВыберите сложность:";
+
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🟢 Легкая", $"difficulty:{gameType}:easy"),
+                InlineKeyboardButton.WithCallbackData("🟡 Средняя", $"difficulty:{gameType}:medium"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🔴 Сложная", $"difficulty:{gameType}:hard"),
+                InlineKeyboardButton.WithCallbackData("⚫ Эксперт", $"difficulty:{gameType}:expert"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад к играм", "/game")
+            }
+        });
+
+        await _botClient.SendTextMessageAsync(
+            chatId: chatId,
+            text: message,
+            parseMode: ParseMode.Markdown,
+            replyMarkup: keyboard,
+            disableNotification: true
+        );
+    }
+
+    private async Task HandleDifficultySelectionAsync(long chatId, int messageId, string data)
+    {
+        try
+        {
+            var parts = data.Split(':');
+            if (parts.Length >= 3)
+            {
+                var gameType = parts[1];
+                var difficulty = parts[2];
+                
+                // Удаляем предыдущее сообщение
+                await DeleteMessageAsync(chatId, messageId);
+                
+                // Запускаем игру с выбранной сложностью
+                await StartGameWithDifficultyAsync(chatId, gameType, difficulty);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error handling difficulty selection: {ex.Message}");
+        }
+    }
+
+    private async Task StartGameWithDifficultyAsync(long chatId, string gameType, string difficulty)
+    {
+        // Останавливаем текущую игру если есть
+        if (_gameStates.ContainsKey(chatId) && _gameStates[chatId].IsActive)
+        {
+            await StopGameAsync(chatId);
+        }
+
+        // Создаем новое состояние игры с уровнем сложности
+        _gameStates[chatId] = new GameState
+        {
+            IsActive = true,
+            GameType = gameType,
+            Difficulty = difficulty,
+            CurrentQuestion = 0,
+            CorrectAnswers = 0,
+            WrongAnswers = 0,
+            StartTime = DateTime.UtcNow
+        };
+
+        var gameName = GamePrompts.GameNames[gameType];
+        var difficultyName = GetDifficultyName(difficulty);
+        
+        await _botClient.SendTextMessageAsync(chatId, $"🎮 **{gameName}** ({difficultyName})\n\nИгра началась! Отвечайте на вопросы.", disableNotification: true);
+
+        // Запускаем первую задачу
+        await ProcessGameAnswerAsync(chatId, "start");
+    }
+
+    private string GetDifficultyName(string difficulty)
+    {
+        return difficulty switch
+        {
+            "easy" => "🟢 Легкая",
+            "medium" => "🟡 Средняя", 
+            "hard" => "🔴 Сложная",
+            "expert" => "⚫ Эксперт",
+            _ => "🟡 Средняя"
+        };
     }
 }
