@@ -229,9 +229,10 @@
         }
 
         /* Desktop layout: sidebar + main */
-        .layout { display: block; }
+        .layout { display: none; }
         .sidebar { display: none; }
-        .chat-panel { display: grid; grid-template-rows: 1fr auto; height: 60dvh; border: 1px solid var(--app-secondary); border-radius: 12px; overflow: hidden; }
+        .controls-sections { display: none !important; }
+        .chat-panel { display: grid; grid-template-rows: 1fr auto; height: 70dvh; border: 1px solid var(--app-secondary); border-radius: 12px; overflow: hidden; }
         @media (min-width: 992px) {
             .layout {
                 display: grid;
@@ -251,8 +252,8 @@
             .controls-sections { display: none; }
             .chat-panel { height: calc(100dvh - 160px); }
             .chat-messages { padding: 12px; overflow-y: auto; background: var(--app-bg); }
-            .chat-input { padding: 12px; background: var(--app-secondary); display: flex; gap: 8px; align-items: center; }
-            .chat-input textarea { flex: 1; resize: none; height: 48px; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; }
+            .chat-input { padding: 12px; background: var(--app-secondary); display: flex; gap: 8px; align-items: center; border-top: 1px solid var(--app-secondary); }
+            .chat-input textarea { flex: 1; resize: none; height: 44px; border-radius: 9999px; border: 1px solid #cbd5e1; padding: 10px 16px; }
         }
 
         @media (max-width: 480px) {
@@ -299,11 +300,10 @@
             Загрузка данных...
         </div>
 
-        <div id="content" style="display: none;">
+        <div id="content" style="display: block;">
             <!-- Dashboard Page -->
             <div id="dashboard" class="page">
                 <div class="layout">
-                    <!-- Sidebar (desktop) -->
                     <aside class="sidebar">
                         <div class="section">
                             <div class="section-title d-flex align-items-center gap-1"><span class="material-icons">psychology</span> AI</div>
