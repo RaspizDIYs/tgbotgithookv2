@@ -158,7 +158,7 @@
           </button>
         </div>
         <div class="d-flex gap-2">
-          <a href="#" id="openLink" class="btn btn-success d-flex align-items-center gap-1" target="_blank">
+          <a href="#" id="openLink" class="btn btn-success d-flex align-items-center gap-1">
             <span class="material-icons">open_in_new</span>
             Открыть в Cursor
           </a>
@@ -271,8 +271,9 @@
       }
 
       function openInCursor(link) {
+        // Явный переход без target=_blank для схемы cursor://
         try {
-          window.location.href = link;
+          window.location.assign(link);
           showSuccess('Открываем в Cursor...');
         } catch (e) {
           showError('Ошибка открытия диплинка');
@@ -329,7 +330,8 @@
 
         // Test link
         if (testLink) {
-          testLink.addEventListener('click', () => {
+          testLink.addEventListener('click', (e) => {
+            e.preventDefault();
             openInCursor(generatedLink.value);
           });
         }

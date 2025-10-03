@@ -374,12 +374,24 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// CORS для GitHub Pages
-app.UseCors(builder => builder
-    .WithOrigins("https://yourusername.github.io", "https://*.github.io")
+// CORS для GitHub Pages и любых *.github.io (динамически)
+app.UseCors(corsBuilder => corsBuilder
+    .SetIsOriginAllowed(origin =>
+    {
+        try
+        {
+            var uri = new Uri(origin);
+            return uri.Host.Equals("raspizdiys.github.io", StringComparison.OrdinalIgnoreCase)
+                   || uri.Host.EndsWith(".github.io", StringComparison.OrdinalIgnoreCase)
+                   || uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    })
     .AllowAnyMethod()
-    .AllowAnyHeader()
-    .AllowCredentials());
+    .AllowAnyHeader());
 
 // Webhook endpoint for GitHub
 app.MapPost("/webhook/github", async (HttpContext context, WebhookHandlerService webhookHandler) =>
