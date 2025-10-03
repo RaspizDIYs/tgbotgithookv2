@@ -17,6 +17,14 @@ public class NotificationSettings
     public bool IssueNotifications { get; set; } = true;
 }
 
+public class GifTextSettings
+{
+    public System.Drawing.Color TextColor { get; set; } = System.Drawing.Color.FromName("White");
+    public TextPosition Position { get; set; } = TextPosition.Bottom;
+    
+    public static GifTextSettings Default => new();
+}
+
 public class TelegramBotService
 {
     private readonly ITelegramBotClient _botClient;
@@ -38,6 +46,7 @@ public class TelegramBotService
     private readonly GifTextEditorService _gifTextEditorService;
     private readonly Dictionary<long, string> _pendingGifTexts = new(); // Для ожидания текста для GIF
     private readonly Dictionary<long, string> _pendingGifFiles = new(); // Для хранения GIF файлов
+    private readonly Dictionary<long, GifTextSettings> _gifTextSettings = new(); // Настройки текста для GIF
     private readonly ChatActivityTracker _chatActivityTracker;
 
     public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService, TenorService tenorService, GifTextEditorService gifTextEditorService, ChatActivityTracker chatActivityTracker)
@@ -246,6 +255,16 @@ public class TelegramBotService
             else if (cleanCommand == "/gifsettings")
             {
                 await ShowGifSettingsAsync(chatId);
+                return;
+            }
+            else if (cleanCommand == "/gifcolor")
+            {
+                await ShowGifColorMenuAsync(chatId);
+                return;
+            }
+            else if (cleanCommand == "/gifposition")
+            {
+                await ShowGifPositionMenuAsync(chatId);
                 return;
             }
             else if (cleanCommand == "/chatactivity")
@@ -1024,6 +1043,16 @@ public class TelegramBotService
             {
                 Console.WriteLine($"🎯 Processing difficulty selection: {data}");
                 await HandleDifficultySelectionAsync(chatId, messageId, data);
+            }
+            else if (data.StartsWith("gifcolor:"))
+            {
+                Console.WriteLine($"🎨 Processing GIF color selection: {data}");
+                await HandleGifColorSelectionAsync(chatId, data);
+            }
+            else if (data.StartsWith("gifposition:"))
+            {
+                Console.WriteLine($"📍 Processing GIF position selection: {data}");
+                await HandleGifPositionSelectionAsync(chatId, data);
             }
             else if (data.StartsWith("copy_deeplink:"))
             {
@@ -3985,15 +4014,25 @@ help - полный список команд";
 
     private async Task HandleGifTextCommandAsync(long chatId)
     {
-        var message = @"📝 **Добавление текста на GIF**
+        // Получаем или создаем настройки для пользователя
+        if (!_gifTextSettings.ContainsKey(chatId))
+        {
+            _gifTextSettings[chatId] = GifTextSettings.Default;
+        }
+        
+        var settings = _gifTextSettings[chatId];
+        var colorName = GetColorName(settings.TextColor);
+        var positionName = settings.Position == TextPosition.Top ? "сверху" : "снизу";
+        
+        var message = $@"📝 **Добавление текста на GIF**
 
 1. Отправьте GIF файл в этот чат
 2. После отправки GIF напишите текст, который хотите добавить
 3. Я добавлю ваш текст на GIF
 
-Настройки текста:
-• Цвет: белый (по умолчанию)
-• Позиция: снизу (по умолчанию)
+**Текущие настройки:**
+• Цвет текста: {colorName}
+• Позиция текста: {positionName}
 
 Отправьте GIF для обработки...";
 
@@ -4014,9 +4053,12 @@ help - полный список команд";
             var token = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN") ?? "";
             var fileUrl = $"https://api.telegram.org/file/bot{token}/{file.FilePath}";
 
+            // Получаем настройки пользователя
+            var settings = _gifTextSettings.ContainsKey(chatId) ? _gifTextSettings[chatId] : GifTextSettings.Default;
+            
             // Добавляем текст на GIF
 #pragma warning disable CA1416 // Validate platform compatibility
-            var editedGifBytes = await _gifTextEditorService.AddTextToGifAsync(fileUrl, textSettings, TextPosition.Bottom, System.Drawing.Color.White);
+            var editedGifBytes = await _gifTextEditorService.AddTextToGifAsync(fileUrl, textSettings, settings.Position, settings.TextColor);
 #pragma warning restore CA1416 // Validate platform compatibility
             
             if (editedGifBytes == null)
@@ -4035,13 +4077,127 @@ help - полный список команд";
         }
     }
 
+    private string GetColorName(System.Drawing.Color color)
+    {
+        return color switch
+        {
+            System.Drawing.Color c when c.Name == "White" => "белый",
+            System.Drawing.Color c when c.Name == "Black" => "черный",
+            System.Drawing.Color c when c.Name == "Red" => "красный",
+            System.Drawing.Color c when c.Name == "Green" => "зеленый",
+            System.Drawing.Color c when c.Name == "Blue" => "синий",
+            System.Drawing.Color c when c.Name == "Yellow" => "желтый",
+            System.Drawing.Color c when c.Name == "Orange" => "оранжевый",
+            System.Drawing.Color c when c.Name == "Purple" => "фиолетовый",
+            System.Drawing.Color c when c.Name == "Pink" => "розовый",
+            System.Drawing.Color c when c.Name == "Cyan" => "голубой",
+            _ => "пользовательский"
+        };
+    }
+
+    private async Task ShowGifColorMenuAsync(long chatId)
+    {
+        // Получаем или создаем настройки для пользователя
+        if (!_gifTextSettings.ContainsKey(chatId))
+        {
+            _gifTextSettings[chatId] = GifTextSettings.Default;
+        }
+        
+        var settings = _gifTextSettings[chatId];
+        var currentColor = GetColorName(settings.TextColor);
+        
+        var message = $@"🎨 **Настройка цвета текста GIF**
+
+**Текущий цвет:** {currentColor}
+
+Выберите новый цвет:";
+
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⚪ Белый", "gifcolor:white"),
+                InlineKeyboardButton.WithCallbackData("⚫ Черный", "gifcolor:black"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🔴 Красный", "gifcolor:red"),
+                InlineKeyboardButton.WithCallbackData("🟢 Зеленый", "gifcolor:green"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🔵 Синий", "gifcolor:blue"),
+                InlineKeyboardButton.WithCallbackData("🟡 Желтый", "gifcolor:yellow"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🟠 Оранжевый", "gifcolor:orange"),
+                InlineKeyboardButton.WithCallbackData("🟣 Фиолетовый", "gifcolor:purple"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🩷 Розовый", "gifcolor:pink"),
+                InlineKeyboardButton.WithCallbackData("🔵 Голубой", "gifcolor:cyan"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад к GIF", "menu:gif"),
+            }
+        });
+
+        await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, replyMarkup: keyboard, disableNotification: true);
+    }
+
+    private async Task ShowGifPositionMenuAsync(long chatId)
+    {
+        // Получаем или создаем настройки для пользователя
+        if (!_gifTextSettings.ContainsKey(chatId))
+        {
+            _gifTextSettings[chatId] = GifTextSettings.Default;
+        }
+        
+        var settings = _gifTextSettings[chatId];
+        var currentPosition = settings.Position == TextPosition.Top ? "сверху" : "снизу";
+        
+        var message = $@"📍 **Настройка позиции текста GIF**
+
+**Текущая позиция:** {currentPosition}
+
+Выберите новую позицию:";
+
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⬆️ Сверху", "gifposition:top"),
+                InlineKeyboardButton.WithCallbackData("⬇️ Снизу", "gifposition:bottom"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⬅️ Назад к GIF", "menu:gif"),
+            }
+        });
+
+        await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, replyMarkup: keyboard, disableNotification: true);
+    }
+
     private async Task ShowGifSettingsAsync(long chatId)
     {
-        var message = @"⚙️ *Настройки GIF*
+        // Получаем или создаем настройки для пользователя
+        if (!_gifTextSettings.ContainsKey(chatId))
+        {
+            _gifTextSettings[chatId] = GifTextSettings.Default;
+        }
+        
+        var settings = _gifTextSettings[chatId];
+        var colorName = GetColorName(settings.TextColor);
+        var positionName = settings.Position == TextPosition.Top ? "сверху" : "снизу";
+        
+        var message = $@"⚙️ **Настройки GIF**
 
-🔧 **Доступные настройки:**
-• Цвет текста: белый
-• Позиция текста: снизу
+**Текущие настройки:**
+• Цвет текста: {colorName}
+• Позиция текста: {positionName}
 • Качество: высокое
 
 📝 **Команды:**
@@ -4051,6 +4207,11 @@ help - полный список команд";
 
         var keyboard = new InlineKeyboardMarkup(new[]
         {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🎨 Цвет текста", "/gifcolor"),
+                InlineKeyboardButton.WithCallbackData("📍 Позиция текста", "/gifposition"),
+            },
             new[]
             {
                 InlineKeyboardButton.WithCallbackData("📝 Добавить текст", "/giftext"),
@@ -4063,6 +4224,76 @@ help - полный список команд";
         });
 
         await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, replyMarkup: keyboard, disableNotification: true);
+    }
+
+    private async Task HandleGifColorSelectionAsync(long chatId, string data)
+    {
+        try
+        {
+            var colorName = data.Split(':')[1];
+            
+            // Получаем или создаем настройки для пользователя
+            if (!_gifTextSettings.ContainsKey(chatId))
+            {
+                _gifTextSettings[chatId] = GifTextSettings.Default;
+            }
+            
+            var settings = _gifTextSettings[chatId];
+            
+            // Устанавливаем новый цвет
+            settings.TextColor = colorName switch
+            {
+                "white" => System.Drawing.Color.FromName("White"),
+                "black" => System.Drawing.Color.FromName("Black"),
+                "red" => System.Drawing.Color.FromName("Red"),
+                "green" => System.Drawing.Color.FromName("Green"),
+                "blue" => System.Drawing.Color.FromName("Blue"),
+                "yellow" => System.Drawing.Color.FromName("Yellow"),
+                "orange" => System.Drawing.Color.FromName("Orange"),
+                "purple" => System.Drawing.Color.FromName("Purple"),
+                "pink" => System.Drawing.Color.FromName("Pink"),
+                "cyan" => System.Drawing.Color.FromName("Cyan"),
+                _ => System.Drawing.Color.FromName("White")
+            };
+            
+            var colorDisplayName = GetColorName(settings.TextColor);
+            await _botClient.SendTextMessageAsync(chatId, $"✅ Цвет текста изменен на: **{colorDisplayName}**", parseMode: ParseMode.Markdown, disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка изменения цвета: {ex.Message}", disableNotification: true);
+        }
+    }
+
+    private async Task HandleGifPositionSelectionAsync(long chatId, string data)
+    {
+        try
+        {
+            var positionName = data.Split(':')[1];
+            
+            // Получаем или создаем настройки для пользователя
+            if (!_gifTextSettings.ContainsKey(chatId))
+            {
+                _gifTextSettings[chatId] = GifTextSettings.Default;
+            }
+            
+            var settings = _gifTextSettings[chatId];
+            
+            // Устанавливаем новую позицию
+            settings.Position = positionName switch
+            {
+                "top" => TextPosition.Top,
+                "bottom" => TextPosition.Bottom,
+                _ => TextPosition.Bottom
+            };
+            
+            var positionDisplayName = settings.Position == TextPosition.Top ? "сверху" : "снизу";
+            await _botClient.SendTextMessageAsync(chatId, $"✅ Позиция текста изменена на: **{positionDisplayName}**", parseMode: ParseMode.Markdown, disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка изменения позиции: {ex.Message}", disableNotification: true);
+        }
     }
 
     private async Task HandleAiResponseWithGifAsync(long chatId, string aiResponse, string userMessage)
