@@ -37,6 +37,7 @@ public class TelegramBotService
     private readonly TenorService _tenorService;
     private readonly GifTextEditorService _gifTextEditorService;
     private readonly Dictionary<long, string> _pendingGifTexts = new(); // Для ожидания текста для GIF
+    private readonly Dictionary<long, string> _pendingGifFiles = new(); // Для хранения GIF файлов
     private readonly ChatActivityTracker _chatActivityTracker;
 
     public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService, TenorService tenorService, GifTextEditorService gifTextEditorService, ChatActivityTracker chatActivityTracker)
@@ -237,11 +238,6 @@ public class TelegramBotService
                 await HandleRandomGifAsync(chatId);
                 return;
             }
-            else if (cleanCommand == "/gifemotion")
-            {
-                await HandleGifEmotionAsync(chatId, text);
-                return;
-            }
             else if (cleanCommand == "/giftext")
             {
                 await HandleGifTextCommandAsync(chatId);
@@ -299,9 +295,23 @@ public class TelegramBotService
         // Обработка GIF сообщений для добавления текста
         if (message.Animation != null && _pendingGifTexts.ContainsKey(chatId))
         {
-            await HandleGifWithTextAsync(chatId, message.Animation.FileId, _pendingGifTexts[chatId]);
-            _pendingGifTexts.Remove(chatId);
+            // Сохраняем GIF файл и ждем текст
+            _pendingGifFiles[chatId] = message.Animation.FileId;
+            _pendingGifTexts[chatId] = "waiting_for_text";
+            await _botClient.SendTextMessageAsync(chatId, "✅ GIF получен! Теперь напишите текст, который хотите добавить на GIF:", disableNotification: true);
             return;
+        }
+
+        // Обработка текста для GIF
+        if (!string.IsNullOrEmpty(text) && _pendingGifTexts.ContainsKey(chatId) && _pendingGifTexts[chatId] == "waiting_for_text")
+        {
+            if (_pendingGifFiles.ContainsKey(chatId))
+            {
+                await HandleGifWithTextAsync(chatId, _pendingGifFiles[chatId], text);
+                _pendingGifTexts.Remove(chatId);
+                _pendingGifFiles.Remove(chatId);
+                return;
+            }
         }
 
         // Обычные команды
@@ -2601,7 +2611,8 @@ public class TelegramBotService
             var normalizedAnswer = NormalizeAnswer(answer);
             
             // Отправляем ответ игрока в AI для обработки
-            var prompt = $@"Player answered: '{normalizedAnswer}'
+            var prompt = $@"CURRENT GAME: {gameName} ({gameState.GameType})
+Player answered: '{normalizedAnswer}'
 
 IMPORTANT: Respond ONLY in Russian language!
 
@@ -2615,7 +2626,8 @@ Remember:
 - Start with ✅ ПРАВИЛЬНО! or ❌ НЕПРАВИЛЬНО!
 - ALL responses must be in Russian!
 - Current question: {gameState.CurrentQuestion + 1}/10
-- Wrong answers: {gameState.WrongAnswers}/1 (game ends after 1 wrong answer)";
+- Wrong answers: {gameState.WrongAnswers}/1 (game ends after 1 wrong answer)
+- Stay strictly within the topic of {gameState.GameType} game!";
             
             var aiResponse = await _geminiManager.GenerateResponseWithContextAsync(prompt, chatId);
             
@@ -3885,7 +3897,6 @@ help - полный список команд";
             },
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("😊 По эмоции", "/gifemotion"),
                 InlineKeyboardButton.WithCallbackData("📝 Добавить текст", "/giftext"),
             },
             new[]
@@ -3971,64 +3982,14 @@ help - полный список команд";
         }
     }
 
-    private async Task HandleGifEmotionAsync(long chatId, string text)
-    {
-        var emotion = text.Replace("/gifemotion", "").Trim();
-        if (string.IsNullOrWhiteSpace(emotion))
-        {
-            var message = @"😊 **GIF по эмоциям**
-
-Доступные эмоции:
-• злость, злой
-• счастье, счастливый  
-• грусть, грустный
-• удивление, удивленный
-• страх, испуг
-• любовь, любовный
-• смех, смешной
-
-Пример: `/gifemotion счастье`";
-
-            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
-            return;
-        }
-
-        await _botClient.SendTextMessageAsync(chatId, $"😊 Ищу GIF для эмоции: **{emotion}**...", parseMode: ParseMode.Markdown, disableNotification: true);
-
-        try
-        {
-            var gifs = await _tenorService.GetGifsByEmotionAsync(emotion);
-            if (gifs.Count == 0)
-            {
-                await _botClient.SendTextMessageAsync(chatId, "❌ GIF не найдены для эмоции: " + emotion, disableNotification: true);
-                return;
-            }
-
-            foreach (var gif in gifs.Take(2))
-            {
-                try
-                {
-                    await _botClient.SendAnimationAsync(chatId, InputFile.FromUri(gif.Url), caption: $"😊 {emotion}: {gif.Title}", disableNotification: true);
-                    await Task.Delay(500);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"❌ Error sending emotion GIF: {ex.Message}");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка поиска GIF по эмоции: {ex.Message}", disableNotification: true);
-        }
-    }
 
     private async Task HandleGifTextCommandAsync(long chatId)
     {
         var message = @"📝 **Добавление текста на GIF**
 
 1. Отправьте GIF файл в этот чат
-2. Я добавлю на него текст
+2. После отправки GIF напишите текст, который хотите добавить
+3. Я добавлю ваш текст на GIF
 
 Настройки текста:
 • Цвет: белый (по умолчанию)
@@ -4039,7 +4000,7 @@ help - полный список команд";
         await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
         
         // Устанавливаем флаг ожидания GIF
-        _pendingGifTexts[chatId] = "default";
+        _pendingGifTexts[chatId] = "waiting_for_gif";
     }
 
     private async Task HandleGifWithTextAsync(long chatId, string fileId, string textSettings)
@@ -4055,7 +4016,7 @@ help - полный список команд";
 
             // Добавляем текст на GIF
 #pragma warning disable CA1416 // Validate platform compatibility
-            var editedGifBytes = await _gifTextEditorService.AddTextToGifAsync(fileUrl, "Текст на GIF", TextPosition.Bottom, System.Drawing.Color.White);
+            var editedGifBytes = await _gifTextEditorService.AddTextToGifAsync(fileUrl, textSettings, TextPosition.Bottom, System.Drawing.Color.White);
 #pragma warning restore CA1416 // Validate platform compatibility
             
             if (editedGifBytes == null)
@@ -4066,7 +4027,7 @@ help - полный список команд";
 
             // Отправляем обработанный GIF
             using var stream = new MemoryStream(editedGifBytes);
-            await _botClient.SendAnimationAsync(chatId, InputFile.FromStream(stream, "edited.gif"), caption: "📝 GIF с добавленным текстом", disableNotification: true);
+            await _botClient.SendAnimationAsync(chatId, InputFile.FromStream(stream, "edited.gif"), caption: $"📝 GIF с текстом: {textSettings}", disableNotification: true);
         }
         catch (Exception ex)
         {
@@ -4086,7 +4047,6 @@ help - полный список команд";
 📝 **Команды:**
 • `/giftext` - Добавить текст на GIF
 • `/gifsearch <запрос>` - Поиск GIF
-• `/gifemotion <эмоция>` - GIF по эмоции
 • `/gifrandom` - Случайный GIF";
 
         var keyboard = new InlineKeyboardMarkup(new[]
@@ -4270,16 +4230,16 @@ help - полный список команд";
     {
         try
         {
-            // Определяем тип GIF на основе ответа и состояния игры
-            string gifCategory = DetermineGifCategoryForMemeGame(aiResponse, gameState);
+            // Извлекаем тему вопроса из ответа AI для поиска релевантного GIF
+            string gifCategory = ExtractMemeTopicFromQuestion(aiResponse);
             
-            // Получаем подходящий GIF
+            // Получаем подходящий GIF по теме вопроса
             var gifs = await _tenorService.SearchGifsAsync(gifCategory, 3);
             if (gifs.Count > 0)
             {
                 var randomGif = gifs[new Random().Next(gifs.Count)];
                 await _botClient.SendAnimationAsync(chatId, InputFile.FromUri(randomGif.Url), 
-                    caption: $"🎬 Мем-игра: {randomGif.Title}", disableNotification: true);
+                    caption: $"🎬 Вопрос про мем: {randomGif.Title}", disableNotification: true);
             }
         }
         catch (Exception ex)
@@ -4288,30 +4248,35 @@ help - полный список команд";
         }
     }
 
-    private string DetermineGifCategoryForMemeGame(string aiResponse, GameState gameState)
+    private string ExtractMemeTopicFromQuestion(string aiResponse)
     {
-        var lowerResponse = aiResponse.ToLower();
+        // Извлекаем ключевые слова из вопроса для поиска релевантного GIF
+        var response = aiResponse.ToLower();
         
-        // Если правильный ответ
-        if (lowerResponse.Contains("правильно") || lowerResponse.Contains("верно") || lowerResponse.Contains("отлично"))
-        {
-            return "celebration success victory";
-        }
-        
-        // Если неправильный ответ
-        if (lowerResponse.Contains("неправильно") || lowerResponse.Contains("неверно") || lowerResponse.Contains("ошибка"))
-        {
-            return "fail mistake wrong";
-        }
-        
-        // Если игра завершена
-        if (lowerResponse.Contains("поздравляю") || lowerResponse.Contains("статистика") || lowerResponse.Contains("финал"))
-        {
-            return "congratulations finish game over";
-        }
-        
-        // По умолчанию - мемы
-        return "memes funny";
+        // Ищем упоминания популярных мемов
+        if (response.Contains("ждун") || response.Contains("waiting"))
+            return "waiting meme";
+        if (response.Contains("дождь") || response.Contains("rain"))
+            return "rain meme";
+        if (response.Contains("кот") || response.Contains("cat"))
+            return "cat meme";
+        if (response.Contains("собака") || response.Contains("dog"))
+            return "dog meme";
+        if (response.Contains("человек") || response.Contains("person"))
+            return "person meme";
+        if (response.Contains("реакция") || response.Contains("reaction"))
+            return "reaction meme";
+        if (response.Contains("грустный") || response.Contains("sad"))
+            return "sad meme";
+        if (response.Contains("счастливый") || response.Contains("happy"))
+            return "happy meme";
+        if (response.Contains("злой") || response.Contains("angry"))
+            return "angry meme";
+        if (response.Contains("удивленный") || response.Contains("surprised"))
+            return "surprised meme";
+            
+        // По умолчанию ищем общие мемы
+        return "meme";
     }
 
     private async Task TestTenorApiAsync(long chatId)

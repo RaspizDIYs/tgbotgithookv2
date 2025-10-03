@@ -28,7 +28,7 @@ RULES:
 - Player has ONLY 1 lifeline (can make 1 mistake, then game ends)
 - Only real popular Russian memes, no fictional ones
 - Questions MUST be strictly within the topic of Russian internet memes
-- Correct answer is NOT shown in the question - only revealed after player's response
+- Correct answer is NEVER shown in the question - only revealed after player's response
 - EVERY question MUST include a GIF from Tenor API related to the meme being asked about
 
 RESPONSE FORMAT (MUST be in Russian):
@@ -39,6 +39,8 @@ C) [option 3]
 D) [option 4]
 
 Правильный ответ: [letter] - [answer text]
+
+CRITICAL: Do NOT include the correct answer in the question text itself!
 
 Start with the first question. Remember: everything must be in Russian!",
 
@@ -51,7 +53,7 @@ RULES:
 - Player has ONLY 1 lifeline (can make 1 mistake, then game ends)
 - Only real facts about LoL, no fictional information
 - Questions MUST be strictly within the topic of League of Legends
-- Correct answer is NOT shown in the question - only revealed after player's response
+- Correct answer is NEVER shown in the question - only revealed after player's response
 
 RESPONSE FORMAT (MUST be in Russian):
 Вопрос: [question text]
@@ -61,6 +63,8 @@ C) [option 3]
 D) [option 4]
 
 Правильный ответ: [letter] - [answer text]
+
+CRITICAL: Do NOT include the correct answer in the question text itself!
 
 Start with the first question. Remember: everything must be in Russian!",
 
@@ -73,7 +77,7 @@ RULES:
 - Player has ONLY 1 lifeline (can make 1 mistake, then game ends)
 - Not very complex programming questions, accessible to beginners
 - Questions MUST be strictly within the topic of programming
-- Correct answer is NOT shown in the question - only revealed after player's response
+- Correct answer is NEVER shown in the question - only revealed after player's response
 
 RESPONSE FORMAT (MUST be in Russian):
 Вопрос: [question text]
@@ -83,6 +87,8 @@ C) [option 3]
 D) [option 4]
 
 Правильный ответ: [letter] - [answer text]
+
+CRITICAL: Do NOT include the correct answer in the question text itself!
 
 Start with the first question. Remember: everything must be in Russian!"
     };
