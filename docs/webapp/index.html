@@ -353,7 +353,7 @@
 
             <!-- Stats Section -->
             <div class="section">
-                <div class="section-title">📊 Статистика</div>
+                <div class="section-title d-flex align-items-center gap-1"><span class="material-icons">bar_chart</span> Статистика</div>
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-value" id="total-commits">-</div>
@@ -376,48 +376,87 @@
 
             <!-- AI Controls Section -->
             <div class="section">
-                <div class="section-title">🤖 AI Ассистент</div>
+                <div class="section-title d-flex align-items-center gap-1"><span class="material-icons">smart_toy</span> AI Ассистент</div>
                 <div class="button-grid">
-                    <button class="btn btn-success" id="start-ai">▶️ Включить AI</button>
-                    <button class="btn btn-danger" id="stop-ai">⏹️ Выключить AI</button>
-                    <button class="btn btn-secondary" id="ai-stats">📊 Статус AI</button>
-                    <button class="btn btn-secondary" id="clear-context">🧹 Очистить контекст</button>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-success flex-grow-1 d-flex align-items-center gap-1" id="start-ai"><span class="material-icons">play_arrow</span> Включить AI</button>
+                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="start-ai"><span class="material-icons">info</span></button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-danger flex-grow-1 d-flex align-items-center gap-1" id="stop-ai"><span class="material-icons">stop</span> Выключить AI</button>
+                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="stop-ai"><span class="material-icons">info</span></button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="ai-stats"><span class="material-icons">insights</span> Статус AI</button>
+                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="ai-stats"><span class="material-icons">info</span></button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="clear-context"><span class="material-icons">cleaning_services</span> Очистить контекст</button>
+                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="clear-context"><span class="material-icons">info</span></button>
+                    </div>
                 </div>
             </div>
 
             <!-- Bot Controls Section -->
             <div class="section">
-                <div class="section-title">🎮 Управление ботом</div>
+                <div class="section-title d-flex align-items-center gap-1"><span class="material-icons">dashboard_customize</span> Управление ботом</div>
                 <div class="button-grid">
-                    <button class="btn btn-secondary" id="bot-status">📊 Статус бота</button>
-                    <button class="btn btn-secondary" id="git-stats">📈 Git статистика</button>
-                    <button class="btn btn-secondary" id="recent-commits">📝 Последние коммиты</button>
-                    <button class="btn btn-secondary" id="leaderboard">🏆 Таблица лидеров</button>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="bot-status"><span class="material-icons">monitor_heart</span> Статус бота</button>
+                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="bot-status"><span class="material-icons">info</span></button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="git-stats"><span class="material-icons">query_stats</span> Git статистика</button>
+                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="git-stats"><span class="material-icons">info</span></button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="recent-commits"><span class="material-icons">update</span> Последние коммиты</button>
+                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="recent-commits"><span class="material-icons">info</span></button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="leaderboard"><span class="material-icons">emoji_events</span> Таблица лидеров</button>
+                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="leaderboard"><span class="material-icons">info</span></button>
+                    </div>
                 </div>
             </div>
 
             <!-- Games Section -->
             <div class="section">
-                <div class="section-title">🎯 Игры</div>
+                <div class="section-title d-flex align-items-center gap-1"><span class="material-icons">sports_esports</span> Игры</div>
                 <div class="button-grid">
-                    <button class="btn btn-secondary" id="meme-game">🎭 Мемы</button>
-                    <button class="btn btn-secondary" id="lol-game">⚔️ League of Legends</button>
-                    <button class="btn btn-secondary" id="programming-game">💻 Программирование</button>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="meme-game"><span class="material-icons">mood</span> Мемы</button>
+                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="meme-game"><span class="material-icons">info</span></button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="lol-game"><span class="material-icons">sports_martial_arts</span> League of Legends</button>
+                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="lol-game"><span class="material-icons">info</span></button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="programming-game"><span class="material-icons">terminal</span> Программирование</button>
+                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="programming-game"><span class="material-icons">info</span></button>
+                    </div>
                 </div>
             </div>
 
             <!-- Cursor Section -->
             <div class="section">
-                <div class="section-title">💻 Cursor IDE</div>
+                <div class="section-title d-flex align-items-center gap-1"><span class="material-icons">code</span> Cursor IDE</div>
                 <div class="button-grid">
-                    <button class="btn btn-secondary" id="cursor-links">🔗 Диплинки Cursor</button>
-                    <button class="btn btn-secondary" id="cursor-help">❓ Помощь Cursor</button>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="cursor-links"><span class="material-icons">link</span> Диплинки Cursor</button>
+                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="cursor-links"><span class="material-icons">info</span></button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-secondary flex-grow-1 d-flex align-items-center gap-1" id="cursor-help"><span class="material-icons">help_outline</span> Помощь Cursor</button>
+                        <button class="btn btn-outline-secondary d-flex align-items-center gap-1" data-info="cursor-help"><span class="material-icons">info</span></button>
+                    </div>
                 </div>
             </div>
 
             <!-- Recent Commits Section -->
             <div class="section">
-                <div class="section-title">📝 Последние коммиты</div>
+                <div class="section-title d-flex align-items-center gap-1"><span class="material-icons">history_edu</span> Последние коммиты</div>
                 <div class="recent-commits" id="recent-commits-list">
                     <div class="loading">Загрузка коммитов...</div>
                 </div>
@@ -541,7 +580,26 @@
 
         <div id="error" class="error" style="display: none;"></div>
         <div id="success" class="success" style="display: none;"></div>
+
+        <!-- Info Modal -->
+        <div class="modal fade" id="infoModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="infoModalLabel">Информация</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body" id="infoModalBody"></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 
     <script>
         // Initialize Telegram Web App
@@ -621,20 +679,34 @@
         const BRIDGE_BASE_URL = 'https://raspizdiys.github.io/tgbotgithookv2/';
 
         async function apiCall(endpoint, method = 'GET', data = null) {
-            const apiBaseUrl = API_BASE_URL;
-            const response = await fetch(`${apiBaseUrl}/api/${endpoint}`, {
-                method,
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: data ? JSON.stringify(data) : null
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/${endpoint}`, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: data ? JSON.stringify(data) : null,
+                    signal: controller.signal
+                });
+                if (!response.ok) {
+                    const text = await response.text().catch(() => '');
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}${text ? ` - ${text}` : ''}`);
+                }
+                // Some endpoints may return plain text
+                const contentType = response.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) return await response.json();
+                return await response.text();
+            } catch (err) {
+                if (err.name === 'AbortError') {
+                    throw new Error('Таймаут запроса. Проверьте соединение или CORS.');
+                }
+                if (err instanceof TypeError) {
+                    throw new Error('Сеть недоступна или CORS заблокировал запрос.');
+                }
+                throw err;
+            } finally {
+                clearTimeout(timeoutId);
             }
-
-            return await response.json();
         }
 
         // Load bot data
@@ -747,7 +819,7 @@
         document.getElementById('ai-stats').addEventListener('click', async () => {
             try {
                 const stats = await apiCall('ai/stats');
-                tg.showAlert(`Статус AI агентов:\n\n${stats}`);
+                tg.showAlert(`Статус AI агентов\n\n${typeof stats === 'string' ? stats : JSON.stringify(stats, null, 2)}`);
             } catch (err) {
                 showError('Ошибка получения статуса AI: ' + err.message);
             }
@@ -815,12 +887,81 @@
             window.open(BRIDGE_BASE_URL, '_blank');
         });
 
-        document.getElementById('cursor-help').addEventListener('click', () => {
-            tg.showAlert('💻 Cursor IDE Диплинки\n\n' +
-                'Используйте диплинки для быстрого открытия файлов и промптов в Cursor:\n\n' +
-                '• Для файлов: ?type=file&workspace=path&path=file.js\n' +
-                '• Для промптов: ?type=prompt&text=ваш текст\n\n' +
-                'Нажмите "Диплинки Cursor" для открытия страницы.');
+        document.getElementById('cursor-help').addEventListener('click', () => showInfo('cursor-help'));
+
+        // Info modal helpers
+        function showInfo(key) {
+            const map = {
+                'start-ai': {
+                    title: 'Включить AI',
+                    body: 'Запускает режим AI ассистента в боте. Команда /glaistart.'
+                },
+                'stop-ai': {
+                    title: 'Выключить AI',
+                    body: 'Останавливает AI ассистента. Команда /glaistop.'
+                },
+                'ai-stats': {
+                    title: 'Статус AI',
+                    body: 'Показывает состояние и базовую статистику работы AI агентов.'
+                },
+                'clear-context': {
+                    title: 'Очистить контекст',
+                    body: 'Сбрасывает накопленный контекст диалога для AI.'
+                },
+                'bot-status': {
+                    title: 'Статус бота',
+                    body: 'Возвращает информацию о состоянии бекенда и аптайме.'
+                },
+                'git-stats': {
+                    title: 'Git статистика',
+                    body: 'Общая статистика репозитория: количество веток, коммитов и время последнего коммита.'
+                },
+                'recent-commits': {
+                    title: 'Последние коммиты',
+                    body: 'Загружает последние коммиты и отображает их ниже.'
+                },
+                'leaderboard': {
+                    title: 'Таблица лидеров',
+                    body: 'Рейтинг пользователей по количеству коммитов.'
+                },
+                'meme-game': {
+                    title: 'Игра Мемы',
+                    body: 'Запускается из бота командой /game meme.'
+                },
+                'lol-game': {
+                    title: 'Игра LoL',
+                    body: 'Запускается из бота командой /game lol.'
+                },
+                'programming-game': {
+                    title: 'Игра Программирование',
+                    body: 'Запускается из бота командой /game programming.'
+                },
+                'cursor-links': {
+                    title: 'Диплинки Cursor',
+                    body: 'Открывает страницу генератора диплинков Cursor (промпт и файл).'
+                },
+                'cursor-help': {
+                    title: 'Помощь Cursor',
+                    body: 'Используйте диплинки для быстрого открытия файлов и промптов в Cursor. Для файлов: ?type=file&workspace=path&path=file.js; для промптов: ?type=prompt&text=...'
+                },
+            };
+            const data = map[key] || { title: 'Информация', body: 'Описание отсутствует.' };
+            const titleEl = document.getElementById('infoModalLabel');
+            const bodyEl = document.getElementById('infoModalBody');
+            titleEl.textContent = data.title;
+            bodyEl.textContent = data.body;
+            const modalEl = document.getElementById('infoModal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
+        // Attach info icon listeners (delegation)
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-info]');
+            if (btn) {
+                const key = btn.getAttribute('data-info');
+                showInfo(key);
+            }
         });
 
         // Simple chat demo (no real backend chat endpoint yet)
