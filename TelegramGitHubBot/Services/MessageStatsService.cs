@@ -152,6 +152,22 @@ public class MessageStatsService
             Console.WriteLine($"❌ Ошибка сохранения message stats: {ex.Message}");
         }
     }
+
+    public int GetTotalMessages()
+    {
+        lock (_lockObject)
+        {
+            return (int)_chatStats.Values.Sum(c => c.TotalMessages);
+        }
+    }
+
+    public int GetActiveUsersCount()
+    {
+        lock (_lockObject)
+        {
+            return _chatStats.Values.SelectMany(c => c.UserMessageCounts.Keys).Distinct().Count();
+        }
+    }
 }
 
 public class ChatMessageStats

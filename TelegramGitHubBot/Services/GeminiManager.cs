@@ -329,4 +329,12 @@ public class GeminiManager
             _chatContexts[chatId].Clear();
         }
     }
+
+    public int GetTotalRequests()
+    {
+        lock (_lockObject)
+        {
+            return _agents.Sum(agent => agent.GetRequestCount());
+        }
+    }
 }

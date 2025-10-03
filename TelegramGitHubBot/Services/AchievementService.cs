@@ -1313,4 +1313,17 @@ public class AchievementService
         
         return result.TrimEnd();
     }
+
+    public int GetTotalCommits()
+    {
+        return _userStats.Values.Sum(u => u.TotalCommits);
+    }
+
+    public List<UserStats> GetLeaderboardUsers()
+    {
+        return _userStats.Values
+            .OrderByDescending(u => u.TotalCommits)
+            .Take(10)
+            .ToList();
+    }
 }

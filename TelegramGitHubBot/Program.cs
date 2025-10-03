@@ -17,6 +17,7 @@ if (!string.IsNullOrWhiteSpace(renderPort) && int.TryParse(renderPort, out var p
 // Add services to the container.
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddCors();
 
 // Debug: Print available environment variables
 Console.WriteLine("=== Environment Variables Debug ===");
@@ -373,6 +374,13 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// CORS для GitHub Pages
+app.UseCors(builder => builder
+    .WithOrigins("https://yourusername.github.io", "https://*.github.io")
+    .AllowAnyMethod()
+    .AllowAnyHeader()
+    .AllowCredentials());
+
 // Webhook endpoint for GitHub
 app.MapPost("/webhook/github", async (HttpContext context, WebhookHandlerService webhookHandler) =>
 {
@@ -393,6 +401,14 @@ app.MapPost("/webhook/telegram/{token}", async (string token, HttpContext contex
     await telegramService.HandleUpdateAsync(context);
 });
 
+// Serve static files for webapp
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(
+        Path.Combine(Directory.GetCurrentDirectory(), "..", "webapp")),
+    RequestPath = "/webapp"
+});
+
 // Health check endpoint
 // Self-ping endpoint to keep instance alive
 app.MapGet("/ping", () => Results.Ok(new
@@ -410,5 +426,181 @@ app.MapGet("/health", () => Results.Ok(new
     environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
     service = "TelegramGitHubBot"
 }));
+
+// Web App API endpoints
+app.MapGet("/api/bot/status", (TelegramBotService telegramService) =>
+{
+    try
+    {
+        var stats = telegramService.GetBotStats();
+        return Results.Ok(new
+        {
+            isActive = true,
+            uptime = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
+            version = "1.0.0",
+            totalCommits = stats.TotalCommits,
+            totalMessages = stats.TotalMessages,
+            activeUsers = stats.ActiveUsers,
+            aiRequests = stats.AiRequests
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error getting bot status: {ex.Message}");
+    }
+});
+
+app.MapGet("/api/ai/status", (GeminiManager geminiManager) =>
+{
+    try
+    {
+        var status = geminiManager.GetCurrentAgentStatus();
+        return Results.Ok(new
+        {
+            isActive = !status.Contains("неактивен") && !status.Contains("ошибка"),
+            status = status
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error getting AI status: {ex.Message}");
+    }
+});
+
+app.MapPost("/api/ai/start", async (HttpContext context, TelegramBotService telegramService) =>
+{
+    try
+    {
+        var chatId = long.Parse(context.Request.Query["chatId"].FirstOrDefault() ?? "0");
+        if (chatId == 0)
+        {
+            return Results.BadRequest("chatId parameter is required");
+        }
+        
+        await telegramService.HandleCommandAsync(chatId, "/glaistart");
+        return Results.Ok(new { success = true, message = "AI started" });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error starting AI: {ex.Message}");
+    }
+});
+
+app.MapPost("/api/ai/stop", async (HttpContext context, TelegramBotService telegramService) =>
+{
+    try
+    {
+        var chatId = long.Parse(context.Request.Query["chatId"].FirstOrDefault() ?? "0");
+        if (chatId == 0)
+        {
+            return Results.BadRequest("chatId parameter is required");
+        }
+        
+        await telegramService.HandleCommandAsync(chatId, "/glaistop");
+        return Results.Ok(new { success = true, message = "AI stopped" });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error stopping AI: {ex.Message}");
+    }
+});
+
+app.MapGet("/api/ai/stats", (GeminiManager geminiManager) =>
+{
+    try
+    {
+        var stats = geminiManager.GetAllAgentsStatus();
+        return Results.Ok(stats);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error getting AI stats: {ex.Message}");
+    }
+});
+
+app.MapPost("/api/ai/clear", async (HttpContext context, TelegramBotService telegramService) =>
+{
+    try
+    {
+        var chatId = long.Parse(context.Request.Query["chatId"].FirstOrDefault() ?? "0");
+        if (chatId == 0)
+        {
+            return Results.BadRequest("chatId parameter is required");
+        }
+        
+        await telegramService.HandleCommandAsync(chatId, "/glaiclear");
+        return Results.Ok(new { success = true, message = "AI context cleared" });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error clearing AI context: {ex.Message}");
+    }
+});
+
+app.MapGet("/api/git/stats", async (GitHubService githubService) =>
+{
+    try
+    {
+        var branches = await githubService.GetBranchesListAsync();
+        var recentCommits = await githubService.GetRecentCommitsWithStatsAsync("main", 1);
+        
+        return Results.Ok(new
+        {
+            branches = branches.Count,
+            commits = recentCommits.Count,
+            lastCommit = recentCommits.FirstOrDefault()?.Date ?? DateTime.MinValue
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error getting git stats: {ex.Message}");
+    }
+});
+
+app.MapGet("/api/git/commits", async (GitHubService githubService, int limit = 10) =>
+{
+    try
+    {
+        var commits = await githubService.GetRecentCommitsWithStatsAsync("main", limit);
+        return Results.Ok(commits.Select(c => new
+        {
+            sha = c.Sha,
+            message = c.Message,
+            author = c.Author,
+            email = c.Email,
+            date = c.Date,
+            additions = c.Additions,
+            deletions = c.Deletions
+        }));
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error getting commits: {ex.Message}");
+    }
+});
+
+app.MapGet("/api/stats/leaderboard", (AchievementService achievementService) =>
+{
+    try
+    {
+        var leaderboard = achievementService.GetLeaderboardUsers();
+        return Results.Ok(leaderboard.Select((user, index) => new
+        {
+            rank = index + 1,
+            username = user.Username,
+            commits = user.TotalCommits,
+            maxLinesChanged = user.MaxLinesChanged,
+            currentStreak = user.CurrentStreak,
+            longestStreak = user.LongestStreak
+        }));
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error getting leaderboard: {ex.Message}");
+    }
+});
+
+// Web App main page
+app.MapGet("/webapp", () => Results.Redirect("/webapp/index.html"));
 
 app.Run();

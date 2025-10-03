@@ -231,6 +231,24 @@ public class TelegramBotService
                 await SendMessageWithBackButtonAsync(chatId, "🧹 **Контекст разговора очищен!**");
                 return;
             }
+            else if (cleanCommand == "/webapp")
+            {
+                var webAppUrl = Environment.GetEnvironmentVariable("WEBAPP_URL") ?? 
+                    "https://raspizdiys.github.io/tgbotgithookv2/webapp";
+                
+                var webAppMessage = "🌐 **Веб-приложение бота**\n\n" +
+                    "Откройте веб-интерфейс для управления ботом и просмотра статистики.";
+                
+                var inlineKeyboard = new InlineKeyboardMarkup(new[]
+                {
+                    new[] { InlineKeyboardButton.WithWebApp("🚀 Открыть веб-приложение", new Telegram.Bot.Types.WebAppInfo { Url = webAppUrl }) },
+                    new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "⬅️ Назад") }
+                });
+                
+                await _botClient.SendTextMessageAsync(chatId, webAppMessage, parseMode: ParseMode.Markdown, 
+                    replyMarkup: inlineKeyboard, disableNotification: true);
+                return;
+            }
             else if (cleanCommand == "/game")
             {
                 await ShowGameMenuAsync(chatId);
@@ -430,7 +448,7 @@ public class TelegramBotService
         return settings;
     }
 
-    private async Task HandleCommandAsync(long chatId, string command, string? username)
+    public async Task HandleCommandAsync(long chatId, string command, string? username = null)
     {
         try
         {
@@ -800,6 +818,9 @@ public class TelegramBotService
 🔍 /glaicurrent - Текущий агент
 🔄 /glaiswitch - Переключить агента
 🧹 /glaiclear - Очистить контекст
+
+🌐 *Веб-интерфейс:*
+🚀 /webapp - Открыть веб-приложение
 
 🎮 *Игры:*
 🎯 /game - Меню игр
@@ -4802,4 +4823,23 @@ help - полный список команд";
             _ => "🟡 Средняя"
         };
     }
+
+    public BotStats GetBotStats()
+    {
+        return new BotStats
+        {
+            TotalCommits = _achievementService.GetTotalCommits(),
+            TotalMessages = _messageStatsService.GetTotalMessages(),
+            ActiveUsers = _messageStatsService.GetActiveUsersCount(),
+            AiRequests = _geminiManager.GetTotalRequests()
+        };
+    }
+}
+
+public class BotStats
+{
+    public int TotalCommits { get; set; }
+    public int TotalMessages { get; set; }
+    public int ActiveUsers { get; set; }
+    public int AiRequests { get; set; }
 }

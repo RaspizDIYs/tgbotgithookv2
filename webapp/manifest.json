@@ -1,0 +1,22 @@
+{
+  "name": "GitHub Bot Dashboard",
+  "short_name": "GitHub Bot",
+  "description": "Веб-интерфейс для управления GitHub ботом",
+  "start_url": "/webapp",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2481cc",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/webapp/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/webapp/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

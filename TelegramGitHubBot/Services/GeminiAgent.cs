@@ -14,6 +14,7 @@ public class GeminiAgent
     private long _tokensUsedToday = 0;
     private DateTime _lastMinuteReset = DateTime.UtcNow;
     private DateTime _lastDayReset = DateTime.UtcNow;
+    private int _requestCount = 0;
     private readonly object _lockObject = new object();
 
     // Лимиты Gemini 2.5 Flash (бесплатный тариф)
@@ -195,6 +196,7 @@ public class GeminiAgent
             // Увеличиваем счетчики после успешного запроса
             var estimatedTokens = prompt.Length / 4 + 100; // Примерная оценка токенов
             IncrementCounters(estimatedTokens);
+            _requestCount++;
             
             if (!response.IsSuccessStatusCode)
             {
@@ -234,5 +236,10 @@ public class GeminiAgent
         {
             return $"Ошибка {_agentName}: {ex.Message}";
         }
+    }
+
+    public int GetRequestCount()
+    {
+        return _requestCount;
     }
 }
