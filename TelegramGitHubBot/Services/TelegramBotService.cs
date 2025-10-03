@@ -262,6 +262,11 @@ public class TelegramBotService
                 await ResetChatActivityAsync(chatId);
                 return;
             }
+            else if (cleanCommand == "/testtenor")
+            {
+                await TestTenorApiAsync(chatId);
+                return;
+            }
         }
 
         // Если активна игра, обрабатываем ответ игрока
@@ -701,6 +706,7 @@ public class TelegramBotService
 🤖 *AI Диалоги:*
 📊 /chatactivity - Статистика активности
 🔄 /resetactivity - Сбросить активность
+🧪 /testtenor - Тест Tenor API
 
 🖱️ *Cursor - Интеграция:*
 🔗 /deep <путь> - Диплинк для Cursor
@@ -3907,11 +3913,14 @@ help - полный список команд";
             return;
         }
 
+        Console.WriteLine($"🔍 GIF Search request: {query}");
         await _botClient.SendTextMessageAsync(chatId, $"🔍 Ищу GIF по запросу: **{query}**...", parseMode: ParseMode.Markdown, disableNotification: true);
 
         try
         {
             var gifs = await _tenorService.SearchGifsAsync(query, 5);
+            Console.WriteLine($"🎬 SearchGifsAsync returned {gifs.Count} GIFs");
+            
             if (gifs.Count == 0)
             {
                 await _botClient.SendTextMessageAsync(chatId, "❌ GIF не найдены по запросу: " + query, disableNotification: true);
@@ -3922,6 +3931,7 @@ help - полный список команд";
             {
                 try
                 {
+                    Console.WriteLine($"📤 Sending GIF: {gif.Url}");
                     await _botClient.SendAnimationAsync(chatId, InputFile.FromUri(gif.Url), caption: $"🎬 {gif.Title}", disableNotification: true);
                     await Task.Delay(500); // Небольшая задержка между GIF
                 }
@@ -3933,27 +3943,33 @@ help - полный список команд";
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"❌ Error in HandleGifSearchAsync: {ex.Message}");
             await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка поиска GIF: {ex.Message}", disableNotification: true);
         }
     }
 
     private async Task HandleRandomGifAsync(long chatId)
     {
+        Console.WriteLine($"🎲 Random GIF request for chat {chatId}");
         await _botClient.SendTextMessageAsync(chatId, "🎲 Ищу случайный GIF...", disableNotification: true);
 
         try
         {
             var gif = await _tenorService.GetRandomGifAsync("memes");
+            Console.WriteLine($"🎬 GetRandomGifAsync returned: {(gif != null ? "GIF found" : "null")}");
+            
             if (gif == null)
             {
                 await _botClient.SendTextMessageAsync(chatId, "❌ Не удалось найти случайный GIF", disableNotification: true);
                 return;
             }
 
+            Console.WriteLine($"📤 Sending random GIF: {gif.Url}");
             await _botClient.SendAnimationAsync(chatId, InputFile.FromUri(gif.Url), caption: $"🎲 Случайный GIF: {gif.Title}", disableNotification: true);
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"❌ Error in HandleRandomGifAsync: {ex.Message}");
             await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения случайного GIF: {ex.Message}", disableNotification: true);
         }
     }
@@ -4299,6 +4315,49 @@ help - полный список команд";
         
         // По умолчанию - мемы
         return "memes funny";
+    }
+
+    private async Task TestTenorApiAsync(long chatId)
+    {
+        try
+        {
+            await _botClient.SendTextMessageAsync(chatId, "🧪 **Тестирование Tenor API**\n\nПроверяю подключение...", parseMode: ParseMode.Markdown, disableNotification: true);
+            
+            Console.WriteLine("🧪 Testing Tenor API...");
+            
+            // Тест 1: Поиск GIF
+            var searchGifs = await _tenorService.SearchGifsAsync("test", 3);
+            Console.WriteLine($"🔍 Search test: {searchGifs.Count} GIFs found");
+            
+            // Тест 2: Трендовые GIF
+            var trendingGifs = await _tenorService.GetTrendingGifsAsync(3);
+            Console.WriteLine($"📈 Trending test: {trendingGifs.Count} GIFs found");
+            
+            // Тест 3: Случайный GIF
+            var randomGif = await _tenorService.GetRandomGifAsync("memes");
+            Console.WriteLine($"🎲 Random test: {(randomGif != null ? "GIF found" : "null")}");
+            
+            var result = $@"🧪 **Результаты тестирования Tenor API**
+
+🔍 **Поиск:** {searchGifs.Count} GIF найдено
+📈 **Тренды:** {trendingGifs.Count} GIF найдено  
+🎲 **Случайный:** {(randomGif != null ? "Найден" : "Не найден")}
+
+**Статус:** {(searchGifs.Count > 0 || trendingGifs.Count > 0 || randomGif != null ? "✅ API работает" : "❌ API не работает")}";
+
+            await _botClient.SendTextMessageAsync(chatId, result, parseMode: ParseMode.Markdown, disableNotification: true);
+            
+            // Отправляем первый найденный GIF если есть
+            if (searchGifs.Count > 0)
+            {
+                await _botClient.SendAnimationAsync(chatId, InputFile.FromUri(searchGifs[0].Url), caption: "🧪 Тестовый GIF", disableNotification: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Tenor API test error: {ex.Message}");
+            await _botClient.SendTextMessageAsync(chatId, $"❌ **Ошибка тестирования Tenor API**\n\n{ex.Message}", parseMode: ParseMode.Markdown, disableNotification: true);
+        }
     }
 
     #endregion

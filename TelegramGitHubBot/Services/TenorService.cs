@@ -11,6 +11,13 @@ public class TenorService
     {
         _httpClient = httpClient;
         _apiKey = configuration["TENOR_API_KEY"] ?? throw new InvalidOperationException("TENOR_API_KEY not configured");
+        
+        // Отладочная информация
+        Console.WriteLine($"🔑 Tenor API Key: {(_apiKey.Length > 20 ? _apiKey.Substring(0, 20) + "..." : "NOT FOUND")}");
+        if (_apiKey.Length < 20)
+        {
+            Console.WriteLine("⚠️ WARNING: Tenor API Key seems too short!");
+        }
     }
 
     public async Task<List<TenorGif>> SearchGifsAsync(string query, int limit = 10)
@@ -18,10 +25,14 @@ public class TenorService
         try
         {
             var url = $"https://tenor.googleapis.com/v2/search?q={Uri.EscapeDataString(query)}&key={_apiKey}&limit={limit}&media_filter=gif";
+            Console.WriteLine($"🔍 Tenor Search URL: {url}");
+            
             var response = await _httpClient.GetStringAsync(url);
+            Console.WriteLine($"📡 Tenor Response Length: {response.Length}");
+            
             var result = JsonSerializer.Deserialize<TenorResponse>(response);
             
-            return result?.Results?.Select(g => new TenorGif
+            var gifs = result?.Results?.Select(g => new TenorGif
             {
                 Id = g.Id,
                 Title = g.Title,
@@ -29,10 +40,14 @@ public class TenorService
                 PreviewUrl = g.MediaFormats?.TinyGif?.Url ?? "",
                 Tags = g.Tags
             }).ToList() ?? new List<TenorGif>();
+            
+            Console.WriteLine($"🎬 Found {gifs.Count} GIFs for query: {query}");
+            return gifs;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"❌ Tenor API error: {ex.Message}");
+            Console.WriteLine($"❌ Stack trace: {ex.StackTrace}");
             return new List<TenorGif>();
         }
     }
