@@ -1,15 +1,12 @@
-import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { apiPost } from '../lib/api';
-import { Button } from './ui/button';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 
 type ChatMessage = { author: 'you' | 'ai'; text: string };
 
-export function Chat({ full = false, aiEnabled = true, onPendingChange }: { full?: boolean; aiEnabled?: boolean; onPendingChange?: (pending: boolean) => void }) {
+export function Chat({ aiEnabled = true, onPendingChange, onMessageSent }: { aiEnabled?: boolean; onPendingChange?: (pending: boolean) => void; onMessageSent?: (sendFunction: (text: string) => void) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
   const listRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [pending, setPending] = useState<boolean>(false);
   const [copyIndex, setCopyIndex] = useState<number | null>(null);
 
@@ -20,15 +17,13 @@ export function Chat({ full = false, aiEnabled = true, onPendingChange }: { full
     }, 0);
   }, []);
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
-    if (!text) return;
+  const handleSend = useCallback(async (text: string) => {
+    if (!text.trim()) return;
     if (!aiEnabled) {
       append({ author: 'ai', text: 'AI выключен' });
       return;
     }
     append({ author: 'you', text });
-    setInput('');
     setPending(true);
     onPendingChange?.(true);
     try {
@@ -40,30 +35,16 @@ export function Chat({ full = false, aiEnabled = true, onPendingChange }: { full
       setPending(false);
       onPendingChange?.(false);
     }
-  }, [append, input, aiEnabled]);
+  }, [append, aiEnabled]);
 
-  const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      void handleSend();
-    }
-  }, [handleSend]);
-
-  const resizeTextarea = useCallback(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    const styles = window.getComputedStyle(el);
-    const lineHeight = parseFloat(styles.lineHeight || '20');
-    const maxRows = 3;
-    const maxHeight = lineHeight * maxRows + parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
-    el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px';
-  }, []);
-
+  // Экспортируем функцию для внешнего использования
   useEffect(() => {
-    resizeTextarea();
-  }, [input, resizeTextarea]);
+    if (onMessageSent) {
+      onMessageSent(handleSend);
+    }
+  }, [onMessageSent, handleSend]);
+
+
 
   const renderBlocks = useCallback((text: string) => {
     const parts: Array<{ type: 'code' | 'text'; content: string; lang?: string }> = [];
@@ -83,112 +64,77 @@ export function Chat({ full = false, aiEnabled = true, onPendingChange }: { full
 
   const renderMessage = useCallback((m: ChatMessage, i: number) => {
     const isAI = m.author === 'ai';
-    const side = isAI ? 'items-start' : 'items-end';
     const bubble = isAI
-      ? 'bg-muted text-foreground rounded-2xl rounded-tl-sm'
-      : 'bg-primary text-primary-foreground rounded-2xl rounded-tr-sm';
+      ? 'bg-muted text-foreground rounded-lg rounded-tl-sm'
+      : 'bg-primary text-primary-foreground rounded-lg rounded-tr-sm';
     const avatarBg = isAI ? 'bg-blue-500' : 'bg-emerald-500';
     const initial = isAI ? 'AI' : 'Вы';
     const blocks = renderBlocks(m.text);
 
     return (
-      <div key={i} className={`flex ${side} gap-2 mb-3`}>
+      <div key={i} className={`flex ${isAI ? 'items-start' : 'items-end justify-end'} gap-2 sm:gap-3 mb-3 sm:mb-4`}>
         {isAI && (
-          <div className={`h-7 w-7 shrink-0 rounded-full ${avatarBg} grid place-items-center text-[10px] font-semibold text-white`}>{initial}</div>
+          <div className={`h-6 w-6 sm:h-8 sm:w-8 shrink-0 rounded-full ${avatarBg} grid place-items-center text-[9px] sm:text-[11px] font-semibold text-white shadow-sm`}>{initial}</div>
         )}
-        <div className={`max-w-[85%] sm:max-w-[75%] ${bubble} px-3 py-2 shadow-sm border border-border`}> 
+        <div className={`relative max-w-[85%] sm:max-w-[80%] ${bubble} px-3 sm:px-4 py-1 shadow-lg border border-border/50 backdrop-blur-sm`}> 
           {blocks.map((b, idx) =>
             b.type === 'code' ? (
               <pre key={idx} className="my-2 overflow-x-auto rounded-md border bg-background text-foreground p-3 text-xs">
                 <code>{b.content}</code>
               </pre>
             ) : (
-              <div key={idx} className="whitespace-pre-wrap leading-relaxed">
+              <div key={idx} className="whitespace-pre-wrap leading-relaxed text-xs sm:text-sm">
                 {b.content}
               </div>
             )
           )}
-          <TooltipProvider>
-            <div className="mt-1 flex justify-end gap-1 opacity-70">
-              <Tooltip>
-                <TooltipTrigger
-                  aria-label="Копировать"
-                  className="h-7 w-7 grid place-items-center rounded-md hover:bg-foreground/10"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(m.text).then(() => {
-                      setCopyIndex(i);
-                      setTimeout(() => setCopyIndex((v) => (v === i ? null : v)), 1200);
-                    });
-                  }}
-                >
-                  <span className="material-icons text-base">content_copy</span>
-                </TooltipTrigger>
-                <TooltipContent>Копировать</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger
-                  aria-label="Отправить"
-                  className="h-7 w-7 grid place-items-center rounded-md hover:bg-foreground/10"
-                  onClick={() => append({ author: 'you', text: m.text })}
-                >
-                  <span className="material-icons text-base">send</span>
-                </TooltipTrigger>
-                <TooltipContent>Отправить</TooltipContent>
-              </Tooltip>
-            </div>
-          </TooltipProvider>
         </div>
+        {isAI && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger
+                aria-label="Копировать"
+                className="h-2.5 w-2.5 sm:h-3 sm:w-3 grid place-items-center rounded hover:bg-foreground/15 opacity-40 hover:opacity-100 transition-opacity ml-1"
+                onClick={() => {
+                  void navigator.clipboard.writeText(m.text).then(() => {
+                    setCopyIndex(i);
+                    setTimeout(() => setCopyIndex((v) => (v === i ? null : v)), 1200);
+                  });
+                }}
+              >
+                <span className="material-icons text-[8px] sm:text-[10px]">content_copy</span>
+              </TooltipTrigger>
+              <TooltipContent>Копировать</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
         {!isAI && (
-          <div className={`h-7 w-7 shrink-0 rounded-full ${avatarBg} grid place-items-center text-[10px] font-semibold text-white`}>{initial}</div>
+          <div className={`h-6 w-6 sm:h-8 sm:w-8 shrink-0 rounded-full ${avatarBg} grid place-items-center text-[9px] sm:text-[11px] font-semibold text-white shadow-sm`}>{initial}</div>
         )}
       </div>
     );
   }, [renderBlocks, copyIndex]);
 
   return (
-    <div className={full ? 'flex flex-col h-[calc(100vh-140px)]' : 'flex flex-col gap-3'}>
+    <div className="flex flex-col">
       <div
         ref={listRef}
-        className={full
-          ? 'flex-1 overflow-auto rounded-md border p-3 bg-card text-card-foreground'
-          : 'min-h-[240px] max-h-[60vh] overflow-auto rounded-md border p-3 bg-card text-card-foreground'}
+        className="flex-1 overflow-auto p-2 sm:p-4"
       >
         {messages.map((m, i) => renderMessage(m, i))}
         {pending && (
           <div className="flex items-start gap-2 mb-1">
-            <div className="h-7 w-7 shrink-0 rounded-full bg-blue-500 grid place-items-center text-[10px] font-semibold text-white">AI</div>
-            <div className="bg-muted rounded-2xl rounded-tl-sm px-3 py-2 border border-border">
+            <div className="h-6 w-6 sm:h-7 sm:w-7 shrink-0 rounded-full bg-blue-500 grid place-items-center text-[8px] sm:text-[10px] font-semibold text-white">AI</div>
+            <div className="bg-muted rounded-2xl rounded-tl-sm px-2 sm:px-3 py-1 sm:py-2 border border-border">
               <span className="inline-flex gap-1">
-                <span className="w-2 h-2 bg-foreground/50 rounded-full animate-pulse"></span>
-                <span className="w-2 h-2 bg-foreground/50 rounded-full animate-pulse [animation-delay:100ms]"></span>
-                <span className="w-2 h-2 bg-foreground/50 rounded-full animate-pulse [animation-delay:200ms]"></span>
+                <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-foreground/50 rounded-full animate-pulse"></span>
+                <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-foreground/50 rounded-full animate-pulse [animation-delay:100ms]"></span>
+                <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-foreground/50 rounded-full animate-pulse [animation-delay:200ms]"></span>
               </span>
             </div>
           </div>
         )}
       </div>
-      <div className={full ? 'mt-auto sticky left-0 right-0 bg-background/80 backdrop-blur border-t' : ''} style={full ? { bottom: 100 } : undefined}>
-        <div className="max-w-3xl mx-auto px-3 py-2">
-          <div className="relative w-full border rounded-md pl-3 pr-10 py-1.5">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKeyDown as any}
-              rows={1}
-              placeholder="Напишите сообщение..."
-              className="w-full bg-transparent outline-none resize-none py-1.5 pr-10 leading-6 max-h-[7.5rem]"
-            />
-            <div className="absolute right-1.5 top-1/2 -translate-y-1/2">
-              <Button size="icon" variant="ghost" onClick={() => void handleSend()} aria-label="Отправить" className="rounded-md bg-transparent hover:bg-accent text-foreground h-8 w-8">
-                <span className="material-icons">send</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
-
-

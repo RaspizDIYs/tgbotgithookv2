@@ -1,4 +1,4 @@
-export const API_BASE_URL = 'https://tgbotgithookv2.onrender.com';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`${API_BASE_URL}${path}`, { ...init });

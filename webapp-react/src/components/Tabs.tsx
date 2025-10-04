@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 
 export function Tabs({ value, onChange }: { value: TabKey; onChange: (v: TabKey) => void }) {
   const items: { key: TabKey; label: string; icon?: string }[] = [
-    { key: 'dashboard', label: 'Главная', icon: 'home' },
+    { key: 'dashboard', label: 'Статистика', icon: 'analytics' },
     { key: 'ai', label: 'AI', icon: 'smart_toy' },
     { key: 'gif', label: 'GIF', icon: 'movie' },
     { key: 'games', label: 'Игры', icon: 'sports_esports' },

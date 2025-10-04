@@ -515,8 +515,8 @@ app.MapPost("/api/bot/command", async (HttpContext context, TelegramBotService t
         }
         if (chatId == 0) return Results.BadRequest("chatId is required (or set TELEGRAM_CHAT_ID)");
 
-        await telegramService.HandleCommandAsync(chatId, command);
-        return Results.Ok(new { success = true });
+        var result = await telegramService.HandleCommandForWebAppAsync(chatId, command);
+        return Results.Ok(result);
     }
     catch (Exception ex)
     {
@@ -572,6 +572,38 @@ app.MapPost("/api/ai/clear", async (HttpContext context, TelegramBotService tele
     catch (Exception ex)
     {
         return Results.Problem($"Error clearing AI context: {ex.Message}");
+    }
+});
+
+// AI Chat endpoint for WebApp
+app.MapPost("/api/ai/chat", async (HttpContext context, GeminiManager geminiManager) =>
+{
+    try
+    {
+        using var reader = new StreamReader(context.Request.Body);
+        var body = await reader.ReadToEndAsync();
+        var payload = System.Text.Json.JsonDocument.Parse(body);
+        var text = payload.RootElement.GetProperty("text").GetString() ?? string.Empty;
+        var chatIdStr = payload.RootElement.TryGetProperty("chatId", out var c) ? c.GetString() : null;
+        
+        if (string.IsNullOrWhiteSpace(text))
+            return Results.BadRequest("text is required");
+            
+        long chatId = 0;
+        if (!string.IsNullOrWhiteSpace(chatIdStr)) long.TryParse(chatIdStr, out chatId);
+        if (chatId == 0)
+        {
+            var envChat = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID");
+            if (!string.IsNullOrWhiteSpace(envChat) && long.TryParse(envChat, out var envChatId)) chatId = envChatId;
+        }
+        if (chatId == 0) return Results.BadRequest("chatId is required (or set TELEGRAM_CHAT_ID)");
+
+        var reply = await geminiManager.GenerateResponseWithContextAsync(text, chatId);
+        return Results.Ok(new { reply });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error generating AI response: {ex.Message}");
     }
 });
 

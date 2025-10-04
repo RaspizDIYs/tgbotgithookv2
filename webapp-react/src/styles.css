@@ -54,7 +54,7 @@ body { background-color: hsl(var(--background)); color: hsl(var(--foreground)); 
 
 /* Mobile-safe area paddings for Telegram WebApp (notches) */
 html, body {
-  height: 100%;
+  min-height: 100%;
 }
 
 #root {
@@ -72,7 +72,28 @@ button, [role="button"], input, textarea {
 /* Base mobile typography and containers */
 @media (max-width: 640px) {
   :root { --radius: 0.75rem; }
-  body { font-size: 15px; }
+  body { font-size: 13px; }
+}
+
+/* Global text size reduction */
+body { font-size: 13px; }
+h1 { font-size: 1.125rem; }
+h2 { font-size: 1rem; }
+h3 { font-size: 0.875rem; }
+h4 { font-size: 0.8125rem; }
+h5 { font-size: 0.75rem; }
+h6 { font-size: 0.6875rem; }
+
+/* Button size reduction */
+.btn-sm { 
+  padding: 0.25rem 0.5rem; 
+  font-size: 0.6875rem; 
+  line-height: 0.875rem;
+}
+.btn-xs { 
+  padding: 0.1875rem 0.375rem; 
+  font-size: 0.625rem; 
+  line-height: 0.75rem;
 }
 
 /* Tailwind v4 design tokens → enable bg-primary, text-muted-foreground, border-input, etc. */
