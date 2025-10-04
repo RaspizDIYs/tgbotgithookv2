@@ -89,7 +89,91 @@ curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
 
 ## Деплой Frontend (GitHub Pages)
 
-### Вариант 1: Использование папки `/docs` (рекомендуется)
+### Почему только `/docs` и `/root`?
+
+GitHub Pages поддерживает только определенные папки:
+- `/root` (корень репозитория) - для основного сайта
+- `/docs` - для документации проекта
+- `/gh-pages` - отдельная ветка
+
+❌ **НЕ поддерживается**: `/webapp`, `/frontend`, `/dist`, `/build` и другие произвольные папки
+
+### Вариант 1: Использование корня репозитория `/root` (рекомендуется)
+
+#### 1. Настройка GitHub Actions
+
+Создайте файл `.github/workflows/deploy-root.yml` (уже создан):
+
+```yaml
+name: Deploy Frontend to Root
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'webapp-react/**'
+      - '.github/workflows/deploy-root.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: webapp-react/package-lock.json
+        
+    - name: Install dependencies
+      run: |
+        cd webapp-react
+        npm ci
+        
+    - name: Build
+      run: |
+        cd webapp-react
+        npm run build
+      env:
+        VITE_API_URL: ${{ secrets.VITE_API_URL || 'http://localhost:5000' }}
+        
+    - name: Copy to root
+      run: |
+        # Удаляем старые файлы фронтенда из корня
+        rm -f index.html
+        rm -rf assets/
+        rm -f cursor.svg
+        rm -f cursor-font.png
+        
+        # Копируем новые файлы
+        cp webapp-react/dist/index.html .
+        cp -r webapp-react/dist/assets/ .
+        cp webapp-react/dist/cursor.svg .
+        cp webapp-react/dist/cursor-font.png .
+        
+    - name: Commit and push
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add index.html assets/ cursor.svg cursor-font.png
+        git diff --staged --quiet || git commit -m "Deploy frontend to root [skip ci]"
+        git push
+```
+
+#### 2. Настройка GitHub Pages
+
+1. Зайдите в Settings → Pages
+2. Source: "Deploy from a branch"
+3. Branch: `main`
+4. Folder: `/ (root)`
+5. Добавьте секрет `VITE_API_URL` с URL вашего бэкенда
+
+### Вариант 2: Использование папки `/docs`
 
 #### 1. Настройка GitHub Actions
 
