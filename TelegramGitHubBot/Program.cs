@@ -372,7 +372,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// Отключаем HTTPS редирект для Render.com (он сам обрабатывает HTTPS)
+var isRender = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PORT"));
+if (!isRender)
+{
+    app.UseHttpsRedirection();
+}
 
 // CORS: читаем ALLOWED_ORIGINS (comma-separated). Если не задано — разрешаем все (временно)
 var allowedOrigins = (Environment.GetEnvironmentVariable("ALLOWED_ORIGINS") ?? string.Empty)
