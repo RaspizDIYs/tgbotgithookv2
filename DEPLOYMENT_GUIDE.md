@@ -89,18 +89,22 @@ curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
 
 ## Деплой Frontend (GitHub Pages)
 
-### 1. Настройка GitHub Actions
+### Вариант 1: Использование папки `/docs` (рекомендуется)
 
-Создайте файл `.github/workflows/deploy.yml`:
+#### 1. Настройка GitHub Actions
+
+Создайте файл `.github/workflows/deploy-docs.yml` (уже создан):
 
 ```yaml
-name: Deploy to GitHub Pages
+name: Deploy to GitHub Pages (docs folder)
 
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    paths:
+      - 'webapp-react/**'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -108,10 +112,10 @@ jobs:
     
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
@@ -127,16 +131,97 @@ jobs:
         cd webapp-react
         npm run build
       env:
-        VITE_API_URL: ${{ secrets.VITE_API_URL }}
+        VITE_API_URL: ${{ secrets.VITE_API_URL || 'http://localhost:5000' }}
         
-    - name: Deploy to GitHub Pages
-      uses: peaceiris/actions-gh-pages@v3
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./webapp-react/dist
+    - name: Copy to docs folder
+      run: |
+        rm -rf docs/*
+        cp -r webapp-react/dist/* docs/
+        
+    - name: Commit and push
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add docs/
+        git diff --staged --quiet || git commit -m "Deploy frontend to docs folder [skip ci]"
+        git push
 ```
 
-### 2. Настройка GitHub Pages
+#### 2. Настройка GitHub Pages
+
+1. Зайдите в Settings → Pages
+2. Source: "Deploy from a branch"
+3. Branch: `main`
+4. Folder: `/docs`
+5. Добавьте секрет `VITE_API_URL` с URL вашего бэкенда
+
+### Вариант 2: Использование GitHub Actions (современный способ)
+
+#### 1. Настройка GitHub Actions
+
+Создайте файл `.github/workflows/deploy-frontend.yml` (уже создан):
+
+```yaml
+name: Deploy Frontend to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'webapp-react/**'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: webapp-react/package-lock.json
+        
+    - name: Install dependencies
+      run: |
+        cd webapp-react
+        npm ci
+        
+    - name: Build
+      run: |
+        cd webapp-react
+        npm run build
+      env:
+        VITE_API_URL: ${{ secrets.VITE_API_URL || 'http://localhost:5000' }}
+        
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+      
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: webapp-react/dist
+        
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
+```
+
+#### 2. Настройка GitHub Pages
 
 1. Зайдите в Settings → Pages
 2. Source: "GitHub Actions"
