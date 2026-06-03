@@ -76,7 +76,9 @@ public class TelegramBotService
 
     private readonly Dictionary<string, System.Timers.Timer> _messageTimers = new();
 
-    private System.Timers.Timer? _dailySummaryTimer;
+    private static System.Timers.Timer? _dailySummaryTimer;
+
+    private static readonly object _dailySummaryTimerLock = new object();
 
     private readonly Dictionary<long, int> _swearWordCounters = new();
 
@@ -3666,11 +3668,21 @@ public class TelegramBotService
 
     {
 
-        _dailySummaryTimer = new System.Timers.Timer();
-
-        if (_dailySummaryTimer != null)
+        lock (_dailySummaryTimerLock)
 
         {
+
+            if (_dailySummaryTimer != null)
+
+            {
+
+                Console.WriteLine("⏰ Daily summary timer already initialized (another instance), skipping");
+
+                return;
+
+            }
+
+            _dailySummaryTimer = new System.Timers.Timer();
 
             _dailySummaryTimer.Elapsed += async (sender, e) => await SendDailySummaryAsync();
 
