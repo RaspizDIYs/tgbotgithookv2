@@ -278,8 +278,14 @@ public class WebhookHandlerService
                 if (!string.IsNullOrWhiteSpace(summary) && !summary.Contains("❌"))
                 {
                     var aiMessage = $"🤖 *Резюме пуша в {repoName}* (`{ref_name}`)\n\n{summary}";
-                    await _telegramBotClient.SendTextMessageAsync(chatId, aiMessage, parseMode: ParseMode.Markdown);
-                    _logger.LogInformation($"✅ AI-резюме пуша отправлено в чат {chatId}");
+
+                    // Куда слать резюме: тема супергруппы (env), иначе тот же chatId
+                    var summaryChatIdStr = Environment.GetEnvironmentVariable("PUSH_SUMMARY_CHAT_ID");
+                    var summaryChatId = !string.IsNullOrWhiteSpace(summaryChatIdStr) && long.TryParse(summaryChatIdStr, out var scid) ? scid : chatId;
+                    int? threadId = int.TryParse(Environment.GetEnvironmentVariable("PUSH_SUMMARY_THREAD_ID"), out var tid) ? tid : null;
+
+                    await _telegramBotClient.SendTextMessageAsync(summaryChatId, aiMessage, parseMode: ParseMode.Markdown, messageThreadId: threadId);
+                    _logger.LogInformation($"✅ AI-резюме пуша отправлено в чат {summaryChatId}, тема {threadId}");
                 }
             }
             catch (Exception ex)
