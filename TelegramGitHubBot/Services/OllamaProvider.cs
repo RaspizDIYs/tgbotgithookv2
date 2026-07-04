@@ -91,7 +91,11 @@ public class OllamaProvider
                 return $"❌ **Ollama ошибка:** {(int)response.StatusCode} {response.StatusCode}\n{err}";
             }
 
-            var responseContent = await response.Content.ReadAsStringAsync();
+            // Явно декодируем как UTF-8: если сервер не проставил charset,
+            // ReadAsStringAsync() может взять неверную кодировку и превратить
+            // кириллицу в «китайский»/мусор.
+            var responseBytes = await response.Content.ReadAsByteArrayAsync();
+            var responseContent = Encoding.UTF8.GetString(responseBytes);
             var responseJson = JsonSerializer.Deserialize<JsonElement>(responseContent);
             if (responseJson.TryGetProperty("choices", out var choices) && choices.GetArrayLength() > 0)
             {
