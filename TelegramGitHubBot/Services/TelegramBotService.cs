@@ -86,6 +86,10 @@ public class TelegramBotService
 
     private readonly Dictionary<long, bool> _geminiMode = new();
 
+    // Буфер последних сообщений чата для /tldr (KAN-61)
+    private readonly Dictionary<long, Queue<string>> _recentMessages = new();
+    private const int MAX_RECENT_MESSAGES = 100;
+
     private readonly Dictionary<long, GameState> _gameStates = new();
 
     private readonly TenorService _tenorService;
@@ -337,6 +341,20 @@ public class TelegramBotService
         {
 
             await CheckSwearWordsAsync(chatId, message.From.Id, text);
+
+        }
+
+
+
+        // Буфер последних сообщений для /tldr (KAN-61) — только обычные сообщения, не команды
+
+        if (!string.IsNullOrWhiteSpace(text) && !text.StartsWith("/"))
+
+        {
+
+            var author = !string.IsNullOrWhiteSpace(fromUsername) ? fromUsername : "user";
+
+            AddToRecent(chatId, $"{author}: {text}");
 
         }
 
@@ -1007,6 +1025,16 @@ public class TelegramBotService
                         }
 
                     }
+
+                    break;
+
+
+
+                case "/tldr":
+
+                case "/summary":
+
+                    await HandleTldrCommandAsync(chatId);
 
                     break;
 
@@ -9165,6 +9193,39 @@ help - полный список команд";
     }
 
 
+
+    // KAN-61: буфер последних сообщений чата
+    private void AddToRecent(long chatId, string line)
+    {
+        if (!_recentMessages.ContainsKey(chatId))
+            _recentMessages[chatId] = new Queue<string>();
+        var q = _recentMessages[chatId];
+        q.Enqueue(line);
+        while (q.Count > MAX_RECENT_MESSAGES)
+            q.Dequeue();
+    }
+
+    // KAN-61: /tldr — пересказ последних сообщений чата через LLM
+    private async Task HandleTldrCommandAsync(long chatId)
+    {
+        if (!_recentMessages.TryGetValue(chatId, out var q) || q.Count < 3)
+        {
+            await _botClient.SendTextMessageAsync(chatId, "Пока нечего пересказывать — маловато сообщений.", disableNotification: true);
+            return;
+        }
+        try
+        {
+            var thread = string.Join("\n", q);
+            var prompt = "Кратко перескажи простым языком, о чём шёл разговор в чате. Буллетами, без воды, не выдумывай. Сообщения:\n" + thread;
+            var response = await _geminiManager.GenerateResponseAsync(prompt);
+            var clean = System.Text.RegularExpressions.Regex.Replace(response, @"\[GIF:[^\]]*\]", "").Trim();
+            await _botClient.SendTextMessageAsync(chatId, $"📝 Пересказ последних {q.Count} сообщений:\n\n{clean}", disableNotification: true);
+        }
+        catch (Exception ex)
+        {
+            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка: {ex.Message}", disableNotification: true);
+        }
+    }
 
     private async Task HandleAiResponseWithGifAsync(long chatId, string aiResponse, string userMessage)
 
