@@ -968,6 +968,46 @@ public class TelegramBotService
 
 
 
+                case "/ask":
+
+                    {
+
+                        var question = parts.Length > 1 ? string.Join(' ', parts.Skip(1)) : "";
+
+                        if (string.IsNullOrWhiteSpace(question))
+
+                        {
+
+                            await _botClient.SendTextMessageAsync(chatId, "❓ Использование: /ask <вопрос>", disableNotification: true);
+
+                            break;
+
+                        }
+
+                        try
+
+                        {
+
+                            var askResponse = await _geminiManager.GenerateResponseAsync(question);
+
+                            await HandleAiResponseWithGifAsync(chatId, askResponse, question);
+
+                        }
+
+                        catch (Exception ex)
+
+                        {
+
+                            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка: {ex.Message}", disableNotification: true);
+
+                        }
+
+                    }
+
+                    break;
+
+
+
                 case "/settings":
 
                 case "/manage":
