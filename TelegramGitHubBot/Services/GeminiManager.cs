@@ -15,7 +15,11 @@ public class GeminiManager
     private readonly HttpClient _httpClient;
     private int _currentAgentIndex = 0;
     private readonly object _lockObject = new object();
-    
+
+    // Альтернативный провайдер: локальная Ollama (если LLM_PROVIDER=ollama).
+    // Когда задан — все запросы генерации делегируются сюда, Gemini не используется.
+    private readonly OllamaProvider? _ollama;
+
     // Контекст разговора по чатам
     private readonly Dictionary<long, List<ChatMessage>> _chatContexts = new();
     private const int MAX_CONTEXT_MESSAGES = 50;
@@ -23,6 +27,15 @@ public class GeminiManager
     public GeminiManager(HttpClient httpClient, IConfiguration configuration)
     {
         _httpClient = httpClient;
+
+        var provider = (configuration["LLM_PROVIDER"] ?? "gemini").ToLowerInvariant();
+        if (provider == "ollama")
+        {
+            _ollama = new OllamaProvider(httpClient, configuration);
+            Console.WriteLine("🦙 LLM провайдер: Ollama (Gemini отключён)");
+            return; // Gemini-агенты не инициализируем
+        }
+
         InitializeAgents(configuration);
     }
 
@@ -72,6 +85,11 @@ public class GeminiManager
 
     public async Task<string> GenerateResponseAsync(string prompt)
     {
+        if (_ollama != null)
+        {
+            return await _ollama.GenerateResponseAsync(prompt);
+        }
+
         if (_agents.Count == 0)
         {
             return "❌ **Ошибка:** Не настроено ни одного AI агента!";
@@ -134,6 +152,11 @@ public class GeminiManager
 
     public string GetAllAgentsStatus()
     {
+        if (_ollama != null)
+        {
+            return _ollama.GetStatus();
+        }
+
         if (_agents.Count == 0)
         {
             return "❌ **Ошибка:** Не настроено ни одного AI агента!";
@@ -156,6 +179,11 @@ public class GeminiManager
 
     public string GetCurrentAgentStatus()
     {
+        if (_ollama != null)
+        {
+            return _ollama.GetStatus();
+        }
+
         if (_agents.Count == 0)
         {
             return "❌ **Ошибка:** Не настроено ни одного AI агента!";
@@ -167,6 +195,7 @@ public class GeminiManager
 
     public void SwitchToNextAgent()
     {
+        if (_ollama != null) return;
         lock (_lockObject)
         {
             _currentAgentIndex = (_currentAgentIndex + 1) % _agents.Count;
@@ -176,6 +205,7 @@ public class GeminiManager
 
     public void SwitchToAgent(int agentIndex)
     {
+        if (_ollama != null) return;
         lock (_lockObject)
         {
             if (agentIndex >= 0 && agentIndex < _agents.Count)
@@ -188,6 +218,7 @@ public class GeminiManager
 
     public void SwitchToWorkingAgent()
     {
+        if (_ollama != null) return;
         lock (_lockObject)
         {
             var workingAgent = _agents.FirstOrDefault(a => a.IsAvailable);
@@ -210,12 +241,18 @@ public class GeminiManager
 
     public bool HasAvailableAgents()
     {
+        if (_ollama != null) return true;
         return _agents.Any(a => a.IsAvailable);
     }
 
     // Новый метод с поддержкой контекста
     public async Task<string> GenerateResponseWithContextAsync(string prompt, long chatId)
     {
+        if (_ollama != null)
+        {
+            return await _ollama.GenerateResponseWithContextAsync(prompt, chatId);
+        }
+
         if (_agents.Count == 0)
         {
             return "❌ **Ошибка:** Не настроено ни одного AI агента!";
@@ -324,6 +361,12 @@ public class GeminiManager
 
     public void ClearContext(long chatId)
     {
+        if (_ollama != null)
+        {
+            _ollama.ClearContext(chatId);
+            return;
+        }
+
         if (_chatContexts.ContainsKey(chatId))
         {
             _chatContexts[chatId].Clear();
@@ -332,6 +375,11 @@ public class GeminiManager
 
     public int GetTotalRequests()
     {
+        if (_ollama != null)
+        {
+            return _ollama.GetTotalRequests();
+        }
+
         lock (_lockObject)
         {
             return _agents.Sum(agent => agent.GetRequestCount());

@@ -12,6 +12,7 @@ public class WebhookHandlerService
     private readonly GitHubService _gitHubService;
     private readonly TelegramBotService _telegramBotService;
     private readonly AchievementService _achievementService;
+    private readonly GeminiManager _llm;
     private readonly ILogger<WebhookHandlerService> _logger;
 
     public WebhookHandlerService(
@@ -20,6 +21,7 @@ public class WebhookHandlerService
         GitHubService gitHubService,
         TelegramBotService telegramBotService,
         AchievementService achievementService,
+        GeminiManager llm,
         ILogger<WebhookHandlerService> logger)
     {
         _configuration = configuration;
@@ -27,8 +29,17 @@ public class WebhookHandlerService
         _gitHubService = gitHubService;
         _telegramBotService = telegramBotService;
         _achievementService = achievementService;
+        _llm = llm;
         _logger = logger;
     }
+
+    // Включена ли AI-суммаризация GitHub-событий (env SUMMARIZE_GITHUB_EVENTS=true)
+    private bool SummariesEnabled =>
+        (Environment.GetEnvironmentVariable("SUMMARIZE_GITHUB_EVENTS") ?? "").ToLowerInvariant() is "true" or "1" or "yes";
+
+    // Убираем теги [GIF:...] из ответа LLM — для резюме они не нужны
+    private static string StripGifTags(string text) =>
+        System.Text.RegularExpressions.Regex.Replace(text, @"\[GIF:[^\]]*\]", "").Trim();
 
     public async Task HandleGitHubWebhookAsync(HttpContext context)
     {
@@ -249,6 +260,33 @@ public class WebhookHandlerService
         _logger.LogInformation($"📤 Push notification disabled for chat {chatId}: {message.Replace('\n', ' ')}");
         // var pushMessage = await SendTelegramMessageAsync(chatId, message, "push", inlineKeyboard);
         // _logger.LogInformation($"✅ Push message sent successfully to chat {chatId}, MessageId: {pushMessage?.MessageId}");
+
+        // AI-суммаризация пуша через LLM (Ollama/Gemini), если включена флагом
+        if (SummariesEnabled)
+        {
+            try
+            {
+                var commitLines = commits.EnumerateArray()
+                    .Select(c => c.GetProperty("message").GetString()?.Split('\n')[0])
+                    .Where(m => !string.IsNullOrWhiteSpace(m));
+                var prompt =
+                    "Кратко суммируй, что изменилось в этом пуше, простым языком, 1-2 предложения, " +
+                    "без эмодзи и без каких-либо тегов. Сообщения коммитов:\n" +
+                    string.Join("\n", commitLines);
+
+                var summary = StripGifTags(await _llm.GenerateResponseAsync(prompt));
+                if (!string.IsNullOrWhiteSpace(summary) && !summary.Contains("❌"))
+                {
+                    var aiMessage = $"🤖 *Резюме пуша в {repoName}* (`{ref_name}`)\n\n{summary}";
+                    await _telegramBotClient.SendTextMessageAsync(chatId, aiMessage, parseMode: ParseMode.Markdown);
+                    _logger.LogInformation($"✅ AI-резюме пуша отправлено в чат {chatId}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Ошибка AI-суммаризации пуша");
+            }
+        }
     }
 
     private Task HandlePullRequestEventAsync(JsonElement payload, long chatId)
