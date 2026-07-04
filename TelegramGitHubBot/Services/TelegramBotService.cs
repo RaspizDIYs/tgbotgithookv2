@@ -990,7 +990,11 @@ public class TelegramBotService
 
                             var askResponse = await _geminiManager.GenerateResponseAsync(question);
 
-                            await HandleAiResponseWithGifAsync(chatId, askResponse, question);
+                            // /ask — чистый ответ без мемов: вырезаем теги [GIF:...]
+
+                            var cleanAnswer = System.Text.RegularExpressions.Regex.Replace(askResponse, @"\[GIF:[^\]]*\]", "").Trim();
+
+                            await _botClient.SendTextMessageAsync(chatId, cleanAnswer, disableNotification: true);
 
                         }
 
