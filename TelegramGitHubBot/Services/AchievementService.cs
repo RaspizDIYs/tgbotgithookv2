@@ -24,6 +24,24 @@ public class CachedStats
     public string Type { get; set; } = string.Empty; // "authors", "commits", "status", etc.
 }
 
+// Один пуш за день (для вечернего дайджеста в 18:00 МСК)
+public class DailyPushEntry
+{
+    public string DateMsk { get; set; } = string.Empty; // yyyy-MM-dd по МСК
+    public string Repo { get; set; } = string.Empty;
+    public string Branch { get; set; } = string.Empty;
+    public string Author { get; set; } = string.Empty;
+    public List<string> Messages { get; set; } = new(); // первые строки сообщений коммитов
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Контейнер буфера дневных пушей + отметка последнего отправленного дайджеста
+public class DailyDigestStore
+{
+    public string LastDigestDateMsk { get; set; } = string.Empty;
+    public List<DailyPushEntry> Entries { get; set; } = new();
+}
+
 public class AchievementService
 {
     private readonly Dictionary<long, UserStats> _userStats = new();
@@ -49,6 +67,11 @@ public class AchievementService
     private readonly int[] _updateHours = { 9, 18, 0 };
     private DateTime _lastScheduledUpdate = DateTime.MinValue;
     private readonly Dictionary<string, ScheduledStats> _scheduledStatsCache = new();
+
+    // Вечерний дайджест пушей (18:00 МСК): буфер за день + отметка отправки
+    private readonly string _dailyDigestFilePath;
+    private readonly DailyDigestStore _dailyDigest = new();
+    private readonly int _digestHourMsk = 18; // во сколько по МСК шлём дайджест
     
     // Защита от потери данных
     private readonly Dictionary<string, ScheduledStats> _backupStatsCache = new();
@@ -83,6 +106,7 @@ public class AchievementService
         _dataFilePath = Path.Combine(_dataDir, "user_stats.json");
         _achievementsFilePath = Path.Combine(_dataDir, "achievements.json");
         _processedShasFilePath = Path.Combine(_dataDir, "processed_shas.json");
+        _dailyDigestFilePath = Path.Combine(_dataDir, "daily_commits.json");
 
         // Настройка GitHub персистенса (опционально)
         var persistOwner = Environment.GetEnvironmentVariable("GITHUB_PERSIST_OWNER");
@@ -110,6 +134,7 @@ public class AchievementService
         LoadAchievements();
         LoadProcessedShas();
         LoadScheduledStatsFromFile();
+        LoadDailyDigestFromFile();
     }
 
     private List<AchievementDefinition> InitializeAchievementDefinitions()
@@ -1001,6 +1026,116 @@ public class AchievementService
     {
         var mskTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
         _lastScheduledUpdate = TimeZoneInfo.ConvertTime(DateTime.UtcNow, mskTimeZone);
+    }
+
+    // ===== Вечерний дайджест пушей (18:00 МСК) =====
+
+    private static string TodayMsk()
+    {
+        var mskTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+        return TimeZoneInfo.ConvertTime(DateTime.UtcNow, mskTimeZone).ToString("yyyy-MM-dd");
+    }
+
+    // Добавить пуш в буфер за сегодня (вызывается из вебхука на каждый push)
+    public void AppendDailyPush(string repo, string branch, string author, IEnumerable<string> messages)
+    {
+        var msgs = messages
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Select(m => m!.Trim())
+            .ToList();
+        if (msgs.Count == 0) return;
+
+        lock (_lockObject)
+        {
+            _dailyDigest.Entries.Add(new DailyPushEntry
+            {
+                DateMsk = TodayMsk(),
+                Repo = string.IsNullOrWhiteSpace(repo) ? "unknown" : repo,
+                Branch = branch ?? "",
+                Author = author ?? "",
+                Messages = msgs,
+                CreatedAt = DateTime.UtcNow
+            });
+            SaveDailyDigestToFile();
+        }
+    }
+
+    // Пора ли слать дайджест: время >= 18:00 МСК и сегодня ещё не слали
+    public bool ShouldSendDailyDigest()
+    {
+        var mskTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+        var nowMsk = TimeZoneInfo.ConvertTime(DateTime.UtcNow, mskTimeZone);
+        if (nowMsk.Hour < _digestHourMsk) return false;
+        lock (_lockObject)
+        {
+            return _dailyDigest.LastDigestDateMsk != nowMsk.ToString("yyyy-MM-dd");
+        }
+    }
+
+    // Пуши за сегодня, сгруппированные по репозиторию (repo -> список первых строк коммитов)
+    public Dictionary<string, List<string>> GetTodaysPushesGrouped()
+    {
+        var today = TodayMsk();
+        lock (_lockObject)
+        {
+            var result = new Dictionary<string, List<string>>();
+            foreach (var e in _dailyDigest.Entries.Where(e => e.DateMsk == today))
+            {
+                if (!result.TryGetValue(e.Repo, out var list))
+                {
+                    list = new List<string>();
+                    result[e.Repo] = list;
+                }
+                list.AddRange(e.Messages);
+            }
+            return result;
+        }
+    }
+
+    // Отметить дайджест отправленным и убрать из буфера всё за сегодня и старше
+    public void MarkDailyDigestSent()
+    {
+        var today = TodayMsk();
+        lock (_lockObject)
+        {
+            _dailyDigest.LastDigestDateMsk = today;
+            _dailyDigest.Entries.RemoveAll(e => string.Compare(e.DateMsk, today, StringComparison.Ordinal) <= 0);
+            SaveDailyDigestToFile();
+        }
+    }
+
+    private void SaveDailyDigestToFile()
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(_dailyDigest, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(_dailyDigestFilePath, json);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Ошибка сохранения буфера дайджеста: {ex.Message}");
+        }
+    }
+
+    private void LoadDailyDigestFromFile()
+    {
+        try
+        {
+            if (!File.Exists(_dailyDigestFilePath)) return;
+            var json = File.ReadAllText(_dailyDigestFilePath);
+            var loaded = JsonSerializer.Deserialize<DailyDigestStore>(json);
+            if (loaded != null)
+            {
+                _dailyDigest.LastDigestDateMsk = loaded.LastDigestDateMsk ?? "";
+                _dailyDigest.Entries.Clear();
+                if (loaded.Entries != null) _dailyDigest.Entries.AddRange(loaded.Entries);
+                Console.WriteLine($"📥 Загружен буфер дайджеста: {_dailyDigest.Entries.Count} пушей, последний дайджест {_dailyDigest.LastDigestDateMsk}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Ошибка загрузки буфера дайджеста: {ex.Message}");
+        }
     }
     
     public void SaveScheduledStats(string key, string data, string type, string parameters = "")

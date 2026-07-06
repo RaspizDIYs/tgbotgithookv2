@@ -7582,6 +7582,8 @@ help - полный список команд";
 
             {
 
+                await MaybeSendDailyDigestAsync();
+
                 await CheckScheduledUpdates();
 
             }
@@ -7609,6 +7611,91 @@ help - полный список команд";
     }
 
     
+
+    // Включена ли выдача дайджеста (тот же флаг, что раньше отвечал за резюме пушей)
+    private static bool DigestEnabled =>
+        (Environment.GetEnvironmentVariable("SUMMARIZE_GITHUB_EVENTS") ?? "").ToLowerInvariant() is "true" or "1" or "yes";
+
+    private static string StripGifTags(string text) =>
+        System.Text.RegularExpressions.Regex.Replace(text ?? "", @"\[GIF:[^\]]*\]", "").Trim();
+
+    // Вечерний дайджест: раз в день в 18:00 МСК одним сообщением рассказываем,
+    // что запушили за день (человеческим языком, сгруппировано по репозиториям).
+    private async Task MaybeSendDailyDigestAsync()
+    {
+        try
+        {
+            // FORCE_DIGEST=1 — прогнать дайджест сейчас, минуя время 18:00 и отметку «уже слали»
+            var force = (Environment.GetEnvironmentVariable("FORCE_DIGEST") ?? "").ToLowerInvariant() is "true" or "1" or "yes";
+
+            if (!DigestEnabled) return;
+            if (!force && !_achievementService.ShouldSendDailyDigest()) return;
+
+            // Куда слать: тема супергруппы (те же env, что использовались для резюме пушей)
+            var chatIdStr = Environment.GetEnvironmentVariable("PUSH_SUMMARY_CHAT_ID");
+            if (string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
+            {
+                Console.WriteLine("⚠️ Дайджест: PUSH_SUMMARY_CHAT_ID не задан, пропуск");
+                return;
+            }
+            int? threadId = int.TryParse(Environment.GetEnvironmentVariable("PUSH_SUMMARY_THREAD_ID"), out var tid) ? tid : null;
+
+            var grouped = _achievementService.GetTodaysPushesGrouped();
+
+            string message;
+            if (grouped.Count == 0)
+            {
+                // Пустой день — шлём шутливую строку, чтобы видеть, что бот жив
+                message = "🍺 *Итоги дня*\n\nСегодня никто не пушил — можно и пивка попить.";
+            }
+            else
+            {
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("🌇 *Что сделали за день*\n");
+
+                foreach (var kvp in grouped.OrderByDescending(k => k.Value.Count))
+                {
+                    var repo = kvp.Key;
+                    var commitLines = kvp.Value;
+                    var prompt =
+                        "Ниже сообщения коммитов за день по одному репозиторию. " +
+                        "Расскажи человеческим языком, 1-3 предложения, что было сделано — " +
+                        "по сути, без воды, без эмодзи, без списков и без тегов. Сообщения коммитов:\n" +
+                        string.Join("\n", commitLines);
+
+                    string summary;
+                    try
+                    {
+                        summary = StripGifTags(await _geminiManager.GenerateResponseAsync(prompt));
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"⚠️ Дайджест: ошибка LLM по {repo}: {ex.Message}");
+                        summary = "";
+                    }
+
+                    // Фолбэк: если LLM не ответил — просто перечислим коммиты
+                    if (string.IsNullOrWhiteSpace(summary) || summary.Contains("❌"))
+                    {
+                        summary = string.Join("; ", commitLines.Take(5));
+                    }
+
+                    sb.AppendLine($"📦 *{repo}* ({commitLines.Count} коммитов)");
+                    sb.AppendLine(summary.Trim());
+                    sb.AppendLine();
+                }
+                message = sb.ToString().Trim();
+            }
+
+            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, messageThreadId: threadId, disableWebPagePreview: true, disableNotification: true);
+            _achievementService.MarkDailyDigestSent();
+            Console.WriteLine($"✅ Дневной дайджест отправлен в чат {chatId}, тема {threadId}, репозиториев: {grouped.Count}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Ошибка отправки дневного дайджеста: {ex.Message}");
+        }
+    }
 
     private async Task CheckScheduledUpdates()
 

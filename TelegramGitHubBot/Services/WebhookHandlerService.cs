@@ -261,36 +261,24 @@ public class WebhookHandlerService
         // var pushMessage = await SendTelegramMessageAsync(chatId, message, "push", inlineKeyboard);
         // _logger.LogInformation($"✅ Push message sent successfully to chat {chatId}, MessageId: {pushMessage?.MessageId}");
 
-        // AI-суммаризация пуша через LLM (Ollama/Gemini), если включена флагом
+        // Резюме на каждый пуш убрано: копим пуши в дневной буфер и шлём одним
+        // дайджестом в 18:00 МСК (см. AchievementService.MarkDailyDigestSent /
+        // TelegramBotService.MaybeSendDailyDigestAsync). Тот же флаг SUMMARIZE_GITHUB_EVENTS.
         if (SummariesEnabled)
         {
             try
             {
                 var commitLines = commits.EnumerateArray()
                     .Select(c => c.GetProperty("message").GetString()?.Split('\n')[0])
-                    .Where(m => !string.IsNullOrWhiteSpace(m));
-                var prompt =
-                    "Кратко суммируй, что изменилось в этом пуше, простым языком, 1-2 предложения, " +
-                    "без эмодзи и без каких-либо тегов. Сообщения коммитов:\n" +
-                    string.Join("\n", commitLines);
-
-                var summary = StripGifTags(await _llm.GenerateResponseAsync(prompt));
-                if (!string.IsNullOrWhiteSpace(summary) && !summary.Contains("❌"))
-                {
-                    var aiMessage = $"🤖 *Резюме пуша в {repoName}* (`{ref_name}`)\n\n{summary}";
-
-                    // Куда слать резюме: тема супергруппы (env), иначе тот же chatId
-                    var summaryChatIdStr = Environment.GetEnvironmentVariable("PUSH_SUMMARY_CHAT_ID");
-                    var summaryChatId = !string.IsNullOrWhiteSpace(summaryChatIdStr) && long.TryParse(summaryChatIdStr, out var scid) ? scid : chatId;
-                    int? threadId = int.TryParse(Environment.GetEnvironmentVariable("PUSH_SUMMARY_THREAD_ID"), out var tid) ? tid : null;
-
-                    await _telegramBotClient.SendTextMessageAsync(summaryChatId, aiMessage, parseMode: ParseMode.Markdown, messageThreadId: threadId);
-                    _logger.LogInformation($"✅ AI-резюме пуша отправлено в чат {summaryChatId}, тема {threadId}");
-                }
+                    .Where(m => !string.IsNullOrWhiteSpace(m))
+                    .Select(m => m!)
+                    .ToList();
+                _achievementService.AppendDailyPush(repoName ?? "unknown", ref_name ?? "", pusher ?? "", commitLines);
+                _logger.LogInformation($"📥 Пуш добавлен в дневной буфер дайджеста: {repoName}/{ref_name}, коммитов: {commitLines.Count}");
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Ошибка AI-суммаризации пуша");
+                _logger.LogWarning(ex, "Ошибка добавления пуша в буфер дайджеста");
             }
         }
     }
