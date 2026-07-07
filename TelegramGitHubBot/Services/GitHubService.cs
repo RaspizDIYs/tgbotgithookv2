@@ -513,6 +513,47 @@ public class GitHubService
         }
     }
 
+    // Первые строки сообщений коммитов за последние сутки по всем веткам
+    // (дедуп по SHA — один коммит виден в нескольких ветках). Источник для
+    // прозаического блока «что сделали за день».
+    public async Task<List<string>> GetDailyCommitMessagesAsync(int maxMessages = 100)
+    {
+        var messages = new List<string>();
+        var seen = new HashSet<string>();
+        try
+        {
+            var branches = await _client.Repository.Branch.GetAll(_owner, _repo);
+            var yesterday = DateTime.UtcNow.AddDays(-1);
+            var today = DateTime.UtcNow;
+
+            foreach (var branch in branches)
+            {
+                try
+                {
+                    var commits = await _client.Repository.Commit.GetAll(_owner, _repo,
+                        new CommitRequest { Sha = branch.Name, Since = yesterday, Until = today });
+
+                    foreach (var commit in commits)
+                    {
+                        if (!string.IsNullOrEmpty(commit.Sha) && !seen.Add(commit.Sha)) continue;
+                        var msg = (commit.Commit.Message ?? "").Split('\n')[0].Trim();
+                        if (!string.IsNullOrWhiteSpace(msg)) messages.Add(msg);
+                        if (messages.Count >= maxMessages) return messages;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error getting commit messages for branch {branch.Name}: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting daily commit messages: {ex.Message}");
+        }
+        return messages;
+    }
+
     public async Task<(int Success, int Failure)> GetDailyWorkflowStatsAsync()
     {
         try

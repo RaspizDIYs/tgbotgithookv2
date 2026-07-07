@@ -261,26 +261,8 @@ public class WebhookHandlerService
         // var pushMessage = await SendTelegramMessageAsync(chatId, message, "push", inlineKeyboard);
         // _logger.LogInformation($"✅ Push message sent successfully to chat {chatId}, MessageId: {pushMessage?.MessageId}");
 
-        // Резюме на каждый пуш убрано: копим пуши в дневной буфер и шлём одним
-        // дайджестом в 18:00 МСК (см. AchievementService.MarkDailyDigestSent /
-        // TelegramBotService.MaybeSendDailyDigestAsync). Тот же флаг SUMMARIZE_GITHUB_EVENTS.
-        if (SummariesEnabled)
-        {
-            try
-            {
-                var commitLines = commits.EnumerateArray()
-                    .Select(c => c.GetProperty("message").GetString()?.Split('\n')[0])
-                    .Where(m => !string.IsNullOrWhiteSpace(m))
-                    .Select(m => m!)
-                    .ToList();
-                _achievementService.AppendDailyPush(repoName ?? "unknown", ref_name ?? "", pusher ?? "", commitLines);
-                _logger.LogInformation($"📥 Пуш добавлен в дневной буфер дайджеста: {repoName}/{ref_name}, коммитов: {commitLines.Count}");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Ошибка добавления пуша в буфер дайджеста");
-            }
-        }
+        // Резюме на каждый пуш убрано. Дневная сводка «что сделали» формируется
+        // раз в день в 18:00 в TelegramBotService.SendDailySummaryAsync из коммитов GitHub.
     }
 
     private Task HandlePullRequestEventAsync(JsonElement payload, long chatId)
