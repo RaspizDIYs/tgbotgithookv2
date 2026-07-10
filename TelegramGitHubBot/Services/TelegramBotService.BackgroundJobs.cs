@@ -419,9 +419,10 @@ public partial class TelegramBotService
             {
                 try
                 {
+                    // Персональный утренний дайджест (Jira-срезы + GlitchTip + LLM).
                     await _botClient.SendTextMessageAsync(
                         chatId: chatId,
-                        text: await BuildJiraDigestAsync(),
+                        text: await BuildMorningDigestAsync(),
                         parseMode: ParseMode.Markdown,
                         messageThreadId: threadId,
                         disableNotification: targetChatId.HasValue);
