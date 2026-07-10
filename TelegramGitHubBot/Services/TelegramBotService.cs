@@ -81,7 +81,6 @@ public class TelegramBotService
 
     private static readonly Random _random = new Random();
 
-    private readonly Dictionary<long, string> _lastMenu = new(); // Для отслеживания предыдущего меню
 
     private readonly Dictionary<long, Stack<string>> _navigationStack = new(); // Стек навигации для каждого чата
 
@@ -2875,29 +2874,6 @@ public class TelegramBotService
 
 
 
-            public void CancelMessageDeletion(long chatId, int messageId)
-
-        {
-
-            var timerKey = $"{chatId}:{messageId}";
-
-            if (_messageTimers.TryGetValue(timerKey, out var timer))
-
-            {
-
-                _messageTimers.Remove(timerKey);
-
-                timer.Stop();
-
-                timer.Dispose();
-
-                Console.WriteLine($"🚫 Cancelled deletion of message {messageId} from chat {chatId}");
-
-            }
-
-        }
-
-
 
     public async Task SendAutoDeletingMessageAsync(long chatId, string text, int delayMinutes = 30, ParseMode? parseMode = null, IReplyMarkup? replyMarkup = null)
 
@@ -4895,48 +4871,6 @@ public class TelegramBotService
 
 
 
-    private string NormalizeAnswer(string answer)
-
-    {
-
-        // Нормализуем ответ игрока для лучшего распознавания
-
-        var normalized = answer.Trim().ToUpper();
-
-        
-
-        // Если ответ содержит только букву
-
-        if (normalized.Length == 1 && "ABCD".Contains(normalized))
-
-        {
-
-            return normalized;
-
-        }
-
-        
-
-        // Если ответ начинается с буквы
-
-        if (normalized.Length > 1 && "ABCD".Contains(normalized[0]))
-
-        {
-
-            return normalized[0].ToString();
-
-        }
-
-        
-
-        // Возвращаем оригинальный ответ
-
-        return answer.Trim();
-
-    }
-
-
-
     private async Task HandleRateLimitCommandAsync(long chatId)
 
     {
@@ -5135,13 +5069,9 @@ public class TelegramBotService
 
                          $"• При сохранении данных\n" +
 
-                         $"• При пересчёте (/recalc)\n" +
-
-                         $"• Ручная очистка: /cleancache\n\n" +
+                         $"• При пересчёте (/recalc)\n\n" +
 
                          $"💡 *Рекомендации:*\n" +
-
-                         $"• Регулярно используйте /cleancache\n" +
 
                          $"• Мониторьте размер кэша\n" +
 
@@ -5156,8 +5086,6 @@ public class TelegramBotService
                 new[]
 
                 {
-
-                    InlineKeyboardButton.WithCallbackData("🧹 Очистить кэш", "/cleancache"),
 
                     InlineKeyboardButton.WithCallbackData("📈 API лимиты", "/ratelimit"),
 
@@ -5184,90 +5112,6 @@ public class TelegramBotService
         {
 
             await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения информации о кэше: {ex.Message}", disableNotification: true);
-
-        }
-
-    }
-
-
-
-    private async Task HandleCleanCacheCommandAsync(long chatId)
-
-    {
-
-        try
-
-        {
-
-            await _botClient.SendTextMessageAsync(chatId, "🧹 Запускаю очистку кэша...", disableNotification: true);
-
-            
-
-            var beforeInfo = _achievementService.GetCacheInfo();
-
-            _achievementService.ForceCleanup();
-
-            var afterInfo = _achievementService.GetCacheInfo();
-
-            
-
-            var usersRemoved = beforeInfo.userStatsCount - afterInfo.userStatsCount;
-
-            var shasRemoved = beforeInfo.processedShasCount - afterInfo.processedShasCount;
-
-            var sizeSaved = beforeInfo.totalSizeBytes - afterInfo.totalSizeBytes;
-
-            
-
-            var sizeKB = sizeSaved / 1024.0;
-
-            var sizeMB = sizeKB / 1024.0;
-
-            
-
-            string sizeText;
-
-            if (sizeMB >= 1)
-
-                sizeText = $"{sizeMB:F2} MB";
-
-            else
-
-                sizeText = $"{sizeKB:F1} KB";
-
-
-
-            var message = $"✅ *Очистка кэша завершена!*\n\n" +
-
-                         $"📊 *Результаты:*\n" +
-
-                         $"• Удалено пользователей: {usersRemoved}\n" +
-
-                         $"• Удалено SHA: {shasRemoved}\n" +
-
-                         $"• Освобождено места: {sizeText}\n\n" +
-
-                         $"📈 *Текущее состояние:*\n" +
-
-                         $"• Пользователи: {afterInfo.userStatsCount}\n" +
-
-                         $"• Достижения: {afterInfo.achievementsCount}\n" +
-
-                         $"• SHA: {afterInfo.processedShasCount}\n\n" +
-
-                         $"💾 Данные сохранены";
-
-
-
-            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
-
-        }
-
-        catch (Exception ex)
-
-        {
-
-            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка очистки кэша: {ex.Message}", disableNotification: true);
 
         }
 
@@ -5709,7 +5553,7 @@ goodluckv2 (настраивается через GOODLUCK_WORKSPACE_PATH)
 
 - Удаление неактивных пользователей (более 90 дней)
 
-- Команды cache, cleancache
+- Команда /cache
 
 
 
@@ -6196,92 +6040,6 @@ help - полный список команд";
 
     
 
-    private async Task HandleScheduledInfoCommandAsync(long chatId)
-
-    {
-
-        try
-
-        {
-
-            var (count, sizeBytes, byType) = _achievementService.GetScheduledStatsInfo();
-
-            var mskTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
-
-            var nowMsk = TimeZoneInfo.ConvertTime(DateTime.UtcNow, mskTimeZone);
-
-            
-
-            var message = $"⏰ *Информация о запланированных обновлениях*\n\n" +
-
-                         $"🕐 *Расписание обновлений:*\n" +
-
-                         $"• 09:00 МСК\n" +
-
-                         $"• 18:00 МСК\n" +
-
-                         $"• 00:00 МСК\n\n" +
-
-                         $"📊 *Текущее состояние:*\n" +
-
-                         $"• Записей в кэше: {count}\n" +
-
-                         $"• Размер данных: {FormatBytes(sizeBytes)}\n" +
-
-                         $"• По типам:\n";
-
-            
-
-            foreach (var type in byType)
-
-            {
-
-                message += $"  - {type.Key}: {type.Value}\n";
-
-            }
-
-            
-
-            message += $"\n🔄 *Автоматически обновляются:*\n" +
-
-                      $"• Статус репозитория\n" +
-
-                      $"• Авторы и коммиты\n" +
-
-                      $"• Недельная статистика\n" +
-
-                      $"• Ачивки и стрики\n" +
-
-                      $"• Рейтинг и лидерборд\n\n" +
-
-                      $"💾 *Управление данными:*\n" +
-
-                      $"• Данные сохраняются в JSON\n" +
-
-                      $"• Старые данные очищаются через 3 дня\n" +
-
-                      $"• Проверка расписания каждые 30 минут\n" +
-
-                      $"• Текущее время МСК: {nowMsk:HH:mm dd.MM.yyyy}";
-
-            
-
-            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, disableNotification: true);
-
-        }
-
-        catch (Exception ex)
-
-        {
-
-            await _botClient.SendTextMessageAsync(chatId, $"❌ Ошибка получения информации о расписании: {ex.Message}", disableNotification: true);
-
-        }
-
-    }
-
-    
-
     private async Task HandleDataProtectionCommandAsync(long chatId)
 
     {
@@ -6418,22 +6176,5 @@ help - полный список команд";
         }
     }
 
-    public BotStats GetBotStats()
-    {
-        return new BotStats
-        {
-            TotalCommits = _achievementService.GetTotalCommits(),
-            TotalMessages = _messageStatsService.GetTotalMessages(),
-            ActiveUsers = _messageStatsService.GetActiveUsersCount(),
-            AiRequests = _geminiManager.GetTotalRequests()
-        };
-    }
-}
 
-public class BotStats
-{
-    public int TotalCommits { get; set; }
-    public int TotalMessages { get; set; }
-    public int ActiveUsers { get; set; }
-    public int AiRequests { get; set; }
 }
