@@ -342,8 +342,25 @@ public class AchievementService
 
     private long GetOrCreateUserId(string author, string email)
     {
-        // Простая хеш-функция для создания ID из email
-        return Math.Abs(email.GetHashCode());
+        // ВАЖНО: string.GetHashCode() рандомизируется на каждый запуск процесса,
+        // поэтому ID менялся после каждого рестарта и статистика фрагментировалась.
+        // Используем детерминированный FNV-1a по нормализованному ключу.
+        var key = !string.IsNullOrWhiteSpace(email) ? email : author;
+        return StableHash(key.Trim().ToLowerInvariant());
+    }
+
+    /// <summary>Детерминированный 63-битный хеш (FNV-1a), стабильный между запусками.</summary>
+    private static long StableHash(string value)
+    {
+        const ulong offset = 14695981039346656037UL;
+        const ulong prime = 1099511628211UL;
+        var hash = offset;
+        foreach (var ch in value)
+        {
+            hash ^= ch;
+            hash *= prime;
+        }
+        return (long)(hash & 0x7FFFFFFFFFFFFFFFUL); // всегда неотрицательный
     }
 
     private UserStats GetOrCreateUserStats(long userId, string author)

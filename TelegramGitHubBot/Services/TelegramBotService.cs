@@ -1828,7 +1828,7 @@ public class TelegramBotService
 
                 // Обрабатываем переключение уведомлений
 
-                await HandleNotificationToggleAsync(chatId, data, messageId);
+                await HandleNotificationToggleAsync(chatId, data, messageId, callbackQuery.Id);
 
             }
 
@@ -2166,7 +2166,7 @@ public class TelegramBotService
 
             var message = "Коммит";
 
-            var shortSha = commitSha[..8];
+            var shortSha = ShaUtils.Short(commitSha);
 
 
 
@@ -2290,7 +2290,7 @@ public class TelegramBotService
 
             var fallbackMessage = $"🚀 *Новый пуш в {owner}/{repoName}*\n\n" +
 
-                                 $"📦 Коммит: `{commitSha[..8]}`\n" +
+                                 $"📦 Коммит: `{ShaUtils.Short(commitSha)}`\n" +
 
                                  $"🔗 [Посмотреть на GitHub](https://github.com/{owner}/{repo}/commit/{commitSha})";
 
@@ -2364,7 +2364,7 @@ public class TelegramBotService
 
 
 
-                var callbackShortSha = commitSha[..8]; // Берем первые 8 символов для callback
+                var callbackShortSha = ShaUtils.Short(commitSha); // Берем первые 8 символов для callback
 
                 var backKeyboard = new InlineKeyboardMarkup(new[]
 
@@ -2426,7 +2426,7 @@ public class TelegramBotService
 
 
 
-    private async Task HandleNotificationToggleAsync(long chatId, string callbackData, int messageId)
+    private async Task HandleNotificationToggleAsync(long chatId, string callbackData, int messageId, string callbackQueryId)
 
     {
 
@@ -2442,7 +2442,7 @@ public class TelegramBotService
 
             {
 
-                await _botClient.AnswerCallbackQueryAsync(callbackData, "❌ Ошибка: некорректные данные");
+                await _botClient.AnswerCallbackQueryAsync(callbackQueryId, "❌ Ошибка: некорректные данные");
 
                 return;
 
@@ -2460,7 +2460,7 @@ public class TelegramBotService
 
             {
 
-                await _botClient.AnswerCallbackQueryAsync(callbackData, "❌ Ошибка: неправильный чат");
+                await _botClient.AnswerCallbackQueryAsync(callbackQueryId, "❌ Ошибка: неправильный чат");
 
                 return;
 
@@ -2522,7 +2522,7 @@ public class TelegramBotService
 
                 default:
 
-                    await _botClient.AnswerCallbackQueryAsync(callbackData, "❌ Неизвестный тип уведомления");
+                    await _botClient.AnswerCallbackQueryAsync(callbackQueryId, "❌ Неизвестный тип уведомления");
 
                     return;
 
@@ -2540,7 +2540,7 @@ public class TelegramBotService
 
             var statusText = GetNotificationStatus(settings, type);
 
-            await _botClient.AnswerCallbackQueryAsync(callbackData, $"{statusText} {notificationType}");
+            await _botClient.AnswerCallbackQueryAsync(callbackQueryId, $"{statusText} {notificationType}");
 
 
 
@@ -2554,7 +2554,7 @@ public class TelegramBotService
 
             Console.WriteLine($"❌ Error toggling notification: {ex.Message}");
 
-            await _botClient.AnswerCallbackQueryAsync(callbackData, "❌ Произошла ошибка");
+            await _botClient.AnswerCallbackQueryAsync(callbackQueryId, "❌ Произошла ошибка");
 
         }
 
@@ -2927,19 +2927,8 @@ public class TelegramBotService
 
         {
 
-            // Получаем последние коммиты из репозитория (используем main ветку)
-
-            var commitMessage = await _gitHubService.GetRecentCommitsAsync("main", 20);
-
-
-
-            // Ищем коммит с совпадающим коротким SHA
-
-            // GetRecentCommitsAsync возвращает string, поэтому нужно получить данные по-другому
-
-            // Пока что просто возвращаем короткий SHA как полный
-
-            return shortSha;
+            // Резолвим полный SHA через GitHub API (принимает короткий ref).
+            return await _gitHubService.ResolveFullShaAsync(shortSha) ?? shortSha;
 
         }
 

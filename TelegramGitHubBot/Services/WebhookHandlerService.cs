@@ -56,8 +56,9 @@ public class WebhookHandlerService
             var body = await reader.ReadToEndAsync();
             var payload = JsonDocument.Parse(body).RootElement;
 
-            // Проверяем подпись если настроена
-            var secret = _configuration["GitHub:WebhookSecret"];
+            // Проверяем подпись если настроена (env GITHUB_WEBHOOK_SECRET)
+            var secret = _configuration["GitHub:WebhookSecret"]
+                ?? Environment.GetEnvironmentVariable("GITHUB_WEBHOOK_SECRET");
             if (!string.IsNullOrEmpty(secret))
             {
                 if (!VerifySignature(body, signature, secret))
@@ -446,8 +447,25 @@ public class WebhookHandlerService
 
     private bool VerifySignature(string payload, string signature, string secret)
     {
-        // Реализация проверки подписи GitHub webhook
-        // Для упрощения пропускаем, но в продакшене обязательно реализовать
-        return true;
+        // GitHub присылает "sha256=<hex>" в заголовке X-Hub-Signature-256.
+        if (string.IsNullOrEmpty(signature) || !signature.StartsWith("sha256=", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var provided = signature["sha256=".Length..];
+
+        using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(secret));
+        var hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(payload));
+        var expected = Convert.ToHexString(hash).ToLowerInvariant();
+
+        // Constant-time сравнение, чтобы не сливать информацию таймингом.
+        return CryptographicOperationsFixedTimeEquals(expected, provided.ToLowerInvariant());
+    }
+
+    private static bool CryptographicOperationsFixedTimeEquals(string a, string b)
+    {
+        if (a.Length != b.Length) return false;
+        var diff = 0;
+        for (var i = 0; i < a.Length; i++) diff |= a[i] ^ b[i];
+        return diff == 0;
     }
 }
