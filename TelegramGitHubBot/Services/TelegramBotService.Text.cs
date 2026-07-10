@@ -116,6 +116,8 @@ public partial class TelegramBotService
 🗂 *Jira:*
 📋 /jira - Быстрый дайджест задач KAN (frontend/backend)
 ☀️ /digest - Утренний дайджест-план (Jira срезы + GlitchTip + ИИ, персонально)
+⏰ /stale - Зависшие задачи (без движения N дней)
+🗓 /monthly - Месячная сводка «что нового»
 
 🤖 *Gemini AI:*
 ▶️ /glaistart - Включить режим AI

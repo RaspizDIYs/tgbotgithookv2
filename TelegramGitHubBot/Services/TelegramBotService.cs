@@ -1010,6 +1010,18 @@ public partial class TelegramBotService
 
                     break;
 
+                case "/stale":
+
+                    await HandleStaleCommandAsync(chatId);
+
+                    break;
+
+                case "/monthly":
+
+                    await HandleMonthlyCommandAsync(chatId);
+
+                    break;
+
 
 
 
