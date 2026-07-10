@@ -113,6 +113,9 @@ public partial class TelegramBotService
 🔥 /streaks - Топ стриков
 🔄 /recalc - Пересчёт статистики
 
+🗂 *Jira:*
+📋 /jira - Дайджест задач KAN (frontend/backend по исполнителям)
+
 🤖 *Gemini AI:*
 ▶️ /glaistart - Включить режим AI
 ⏹️ /glaistop - Выключить режим AI

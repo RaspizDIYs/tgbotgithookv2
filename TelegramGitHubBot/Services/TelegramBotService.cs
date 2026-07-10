@@ -77,6 +77,7 @@ public partial class TelegramBotService
     private const int MAX_RECENT_MESSAGES = 100;
 
     private readonly TenorService _tenorService;
+    private readonly JiraService _jiraService;
 
     private readonly ChatActivityTracker _chatActivityTracker;
 
@@ -93,7 +94,7 @@ public partial class TelegramBotService
 
 
 
-    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService, TenorService tenorService)
+    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService, TenorService tenorService, JiraService jiraService)
 
     {
 
@@ -108,6 +109,8 @@ public partial class TelegramBotService
         _messageStatsService = messageStatsService ?? throw new ArgumentNullException(nameof(messageStatsService));
 
         _tenorService = tenorService ?? throw new ArgumentNullException(nameof(tenorService));
+
+        _jiraService = jiraService ?? throw new ArgumentNullException(nameof(jiraService));
 
         
 
@@ -985,6 +988,14 @@ public partial class TelegramBotService
                 case "/backup":
 
                     await HandleDataProtectionCommandAsync(chatId);
+
+                    break;
+
+                case "/jira":
+
+                case "/kan":
+
+                    await HandleJiraDigestAsync(chatId);
 
                     break;
 

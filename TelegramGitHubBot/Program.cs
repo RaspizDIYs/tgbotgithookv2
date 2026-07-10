@@ -58,6 +58,10 @@ builder.Services.AddSingleton<TenorService>(sp => new TenorService(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("tenor"),
     sp.GetRequiredService<IConfiguration>()));
 
+builder.Services.AddSingleton<JiraService>(sp => new JiraService(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("jira"),
+    sp.GetRequiredService<IConfiguration>()));
+
 builder.Services.AddSingleton<AchievementService>();
 builder.Services.AddSingleton<MessageStatsService>();
 builder.Services.AddSingleton<TelegramBotService>();

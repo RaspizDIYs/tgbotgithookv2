@@ -34,6 +34,7 @@ public static class BotCommands
         new() { Command = "leaderboard", Description = "Таблица лидеров" },
         new() { Command = "streaks", Description = "Топ стриков" },
         new() { Command = "recalc", Description = "Пересчёт статистики" },
+        new() { Command = "jira", Description = "Дайджест задач Jira (KAN) по ролям" },
         new() { Command = "glaistart", Description = "Включить режим AI" },
         new() { Command = "glaistop", Description = "Выключить режим AI" },
         new() { Command = "glaistats", Description = "Статус всех AI-агентов" },
