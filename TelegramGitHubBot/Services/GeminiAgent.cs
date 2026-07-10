@@ -150,7 +150,10 @@ public class GeminiAgent
 ОТВЕЧАЙ НА РУССКОМ ЯЗЫКЕ и будь дружелюбным!";
     }
 
-    public async Task<string> GenerateResponseAsync(string prompt)
+    public Task<string> GenerateResponseAsync(string prompt) => GenerateResponseAsync(prompt, raw: false);
+
+    /// <param name="raw">true — без «GIF-персоны» (для служебных вызовов агента, где нужен чистый JSON).</param>
+    public async Task<string> GenerateResponseAsync(string prompt, bool raw)
     {
         try
         {
@@ -160,9 +163,9 @@ public class GeminiAgent
                 return $"❌ **{_agentName}: Лимиты исчерпаны!**\n\n" + GetStatus();
             }
 
-            // Добавляем системный промпт с инструкциями по GIF
-            var systemPrompt = GetSystemPrompt();
-            var fullPrompt = $"{systemPrompt}\n\n{prompt}";
+            // В raw-режиме не подмешиваем GIF-персону — иначе модель отвечает
+            // болтовнёй вместо строгого JSON и tool-calling ломается.
+            var fullPrompt = raw ? prompt : $"{GetSystemPrompt()}\n\n{prompt}";
 
             var requestBody = new
             {

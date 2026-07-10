@@ -32,7 +32,7 @@ public partial class TelegramBotService
         for (var step = 0; step < MaxAgenticSteps; step++)
         {
             var planner = BuildPlannerPrompt(question, collected.ToString());
-            var raw = await _geminiManager.GenerateResponseAsync(planner);
+            var raw = await _geminiManager.GenerateRawResponseAsync(planner);
             var (tool, args) = ParseToolCall(raw);
             if (string.IsNullOrEmpty(tool)) break;
 
@@ -55,7 +55,7 @@ public partial class TelegramBotService
                 $"Данные, собранные инструментами бота:\n{collected}\n" +
                 "Ответь пользователю по-русски: кратко и по делу, суммаризируй данные. " +
                 "Не выдумывай того, чего нет в данных.";
-            answer = await _geminiManager.GenerateResponseAsync(finalPrompt);
+            answer = await _geminiManager.GenerateRawResponseAsync(finalPrompt);
         }
 
         answer = System.Text.RegularExpressions.Regex.Replace(answer, @"\[GIF:[^\]]*\]", "").Trim();
