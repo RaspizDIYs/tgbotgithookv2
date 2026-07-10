@@ -31,6 +31,26 @@ public sealed class RepositoryScannerService : BackgroundService
         _backfillFlagPath = Path.Combine(dataDir, "backfill_state.json");
     }
 
+    // Не запускаем фоновые проходы, если лимит GitHub почти исчерпан — иначе бот
+    // добивает остаток и команды пользователя (/ask, /commits) падают на rate limit.
+    private async Task<bool> HasRateBudgetAsync(int min = 500)
+    {
+        try
+        {
+            var (remaining, _, reset) = await _gitHub.GetRateLimitAsync();
+            if (remaining < min)
+            {
+                _logger.LogWarning("⏳ GitHub rate limit low ({Remaining}); фоновой проход пропущен до {Reset:HH:mm} UTC", remaining, reset);
+                return false;
+            }
+            return true;
+        }
+        catch
+        {
+            return true; // не смогли узнать лимит — не блокируем
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await BackfillOnceAsync(stoppingToken);
@@ -50,6 +70,9 @@ public sealed class RepositoryScannerService : BackgroundService
             _logger.LogInformation("⏭️ Backfill skipped: flag exists");
             return;
         }
+
+        if (!await HasRateBudgetAsync())
+            return; // не выжигаем остаток лимита фоновым бэкфиллом — команды пользователя важнее
 
         try
         {
@@ -85,6 +108,9 @@ public sealed class RepositoryScannerService : BackgroundService
 
     private async Task ScanPassAsync(CancellationToken ct)
     {
+        if (!await HasRateBudgetAsync())
+            return;
+
         try
         {
             var branches = await _gitHub.GetBranchesListAsync();
