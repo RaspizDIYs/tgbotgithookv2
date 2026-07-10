@@ -9,6 +9,7 @@ public sealed class JiraIssue
     public string Key { get; set; } = "";
     public string Summary { get; set; } = "";
     public string Status { get; set; } = "";
+    public string? DueDate { get; set; }
     public string? AssigneeAccountId { get; set; }
     public string? AssigneeName { get; set; }
 }
@@ -53,7 +54,7 @@ public sealed class JiraService
     public async Task<List<JiraIssue>> GetActiveIssuesAsync()
         => await SearchAsync($"project = {_project} AND statusCategory != Done ORDER BY created DESC");
 
-    public async Task<List<JiraIssue>> SearchAsync(string jql)
+    public async Task<List<JiraIssue>> SearchAsync(string jql, int limit = 100)
     {
         var issues = new List<JiraIssue>();
         if (!IsConfigured) return issues;
@@ -66,7 +67,7 @@ public sealed class JiraService
         do
         {
             var url = $"{_baseUrl}/rest/api/3/search/jql?jql={Uri.EscapeDataString(jql)}" +
-                      "&fields=summary,status,assignee&maxResults=100";
+                      $"&fields=summary,status,assignee,duedate&maxResults={limit}";
             if (!string.IsNullOrEmpty(nextPageToken))
                 url += $"&nextPageToken={Uri.EscapeDataString(nextPageToken)}";
 
@@ -112,9 +113,21 @@ public sealed class JiraService
             Key = it.TryGetProperty("key", out var k) ? k.GetString() ?? "" : "",
             Summary = fields.TryGetProperty("summary", out var s) ? s.GetString() ?? "" : "",
             Status = fields.TryGetProperty("status", out var st) && st.TryGetProperty("name", out var sn) ? sn.GetString() ?? "" : "",
+            DueDate = fields.TryGetProperty("duedate", out var dd) && dd.ValueKind == JsonValueKind.String ? dd.GetString() : null,
             AssigneeAccountId = accId,
             AssigneeName = name,
         };
+    }
+
+    /// <summary>Секция задач проекта по доп. условию JQL (ORDER BY updated DESC дописывается сам).</summary>
+    public Task<List<JiraIssue>> SearchSectionAsync(string jqlExtra, int limit = 20)
+        => SearchAsync($"project = {_project} AND {jqlExtra} ORDER BY updated DESC", limit);
+
+    /// <summary>Число задач по условию (для строк-итогов). Новый /search/jql не даёт надёжный total — считаем по ключам.</summary>
+    public async Task<int> CountAsync(string jqlExtra, int cap = 100)
+    {
+        var list = await SearchAsync($"project = {_project} AND {jqlExtra}", cap);
+        return list.Count;
     }
 
     public string RoleOf(JiraIssue issue)

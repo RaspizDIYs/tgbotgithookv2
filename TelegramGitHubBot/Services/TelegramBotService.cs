@@ -78,6 +78,7 @@ public partial class TelegramBotService
 
     private readonly TenorService _tenorService;
     private readonly JiraService _jiraService;
+    private readonly GlitchTipService _glitchTipService;
 
     private readonly ChatActivityTracker _chatActivityTracker;
 
@@ -94,7 +95,7 @@ public partial class TelegramBotService
 
 
 
-    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService, TenorService tenorService, JiraService jiraService)
+    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService, TenorService tenorService, JiraService jiraService, GlitchTipService glitchTipService)
 
     {
 
@@ -111,6 +112,8 @@ public partial class TelegramBotService
         _tenorService = tenorService ?? throw new ArgumentNullException(nameof(tenorService));
 
         _jiraService = jiraService ?? throw new ArgumentNullException(nameof(jiraService));
+
+        _glitchTipService = glitchTipService ?? throw new ArgumentNullException(nameof(glitchTipService));
 
         
 
@@ -996,6 +999,14 @@ public partial class TelegramBotService
                 case "/kan":
 
                     await HandleJiraDigestAsync(chatId);
+
+                    break;
+
+                case "/digest":
+
+                case "/plan":
+
+                    await HandleDigestCommandAsync(chatId);
 
                     break;
 

@@ -114,7 +114,8 @@ public partial class TelegramBotService
 🔄 /recalc - Пересчёт статистики
 
 🗂 *Jira:*
-📋 /jira - Дайджест задач KAN (frontend/backend по исполнителям)
+📋 /jira - Быстрый дайджест задач KAN (frontend/backend)
+☀️ /digest - Утренний дайджест-план (Jira срезы + GlitchTip + ИИ, персонально)
 
 🤖 *Gemini AI:*
 ▶️ /glaistart - Включить режим AI
