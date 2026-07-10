@@ -22,7 +22,8 @@ public partial class TelegramBotService
 - get_ci_status(branch?: string) — статусы CI/CD (workflow runs)
 - get_active_authors(days?: int=30) — активные авторы за период
 - search_commits(query: string, limit?: int=10) — поиск по коммитам
-- get_leaderboard() — таблица лидеров по коммитам/стрикам";
+- get_leaderboard() — таблица лидеров по коммитам/стрикам
+- get_jira_issues() — активные задачи Jira (KAN) с исполнителями и статусами";
 
     private async Task RunAgenticAskAsync(long chatId, string question)
     {
@@ -165,6 +166,14 @@ public partial class TelegramBotService
                 }
                 case "get_leaderboard":
                     return _achievementService.GetLeaderboard();
+                case "get_jira_issues":
+                {
+                    if (!_jiraService.IsConfigured) return "Jira не настроена (нет JIRA_EMAIL/JIRA_API_TOKEN).";
+                    var issues = await _jiraService.GetActiveIssuesAsync();
+                    if (issues.Count == 0) return "Активных задач в Jira нет.";
+                    return string.Join("\n", issues.Select(i =>
+                        $"{i.Key} [{i.Status}] ({(_jiraService.RoleOf(i) == "frontend" ? "frontend" : _jiraService.RoleOf(i) == "backend" ? "backend" : "—")}, {i.AssigneeName ?? "без исполнителя"}): {i.Summary}"));
+                }
                 default:
                     return $"Неизвестный инструмент: {tool}";
             }
