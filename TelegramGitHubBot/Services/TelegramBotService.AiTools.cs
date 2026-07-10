@@ -15,7 +15,7 @@ public partial class TelegramBotService
 {
     private const int MaxAgenticSteps = 3;
 
-    private const string ToolCatalog = @"- get_recent_commits(branch?: string, count?: int=10) — последние коммиты ветки (по умолчанию — дефолтная ветка)
+    private const string ToolCatalog = @"- get_recent_commits(branch?: string, count?: int=10) — последние коммиты. НЕ указывай branch, если пользователь явно не назвал ветку — бот сам возьмёт дефолтную (master).
 - get_repo_status() — общий статус репозитория
 - get_branches() — список веток
 - get_pull_requests() — открытые pull request'ы
@@ -54,7 +54,8 @@ public partial class TelegramBotService
                 $"Пользователь спросил: \"{question}\"\n\n" +
                 $"Данные, собранные инструментами бота:\n{collected}\n" +
                 "Ответь пользователю по-русски: кратко и по делу, суммаризируй данные. " +
-                "Не выдумывай того, чего нет в данных.";
+                "Не выдумывай того, чего нет в данных. " +
+                "Если в данных есть строка ошибки (начинается с ❌) — сообщи пользователю точную причину дословно, не смягчай и не придумывай «попробуйте позже».";
             answer = await _geminiManager.GenerateRawResponseAsync(finalPrompt);
         }
 
@@ -131,6 +132,22 @@ public partial class TelegramBotService
         return def;
     }
 
+    // Дефолтная ветка репозитория (goodluckv2 — это master, а не main).
+    // Резолвим реальную; при неудаче берём первую доступную ветку, и лишь затем master.
+    private async Task<string> ResolveDefaultBranchAsync()
+    {
+        var def = await _gitHubService.TryGetDefaultBranchAsync();
+        if (!string.IsNullOrWhiteSpace(def)) return def!;
+        try
+        {
+            var branches = await _gitHubService.GetBranchesListAsync();
+            if (branches.Count > 0)
+                return branches.Contains("master") ? "master" : branches.Contains("main") ? "main" : branches[0];
+        }
+        catch { }
+        return "master";
+    }
+
     private async Task<string> InvokeToolAsync(string tool, JsonElement args)
     {
         try
@@ -141,7 +158,7 @@ public partial class TelegramBotService
                 {
                     var branch = ArgStr(args, "branch");
                     if (string.IsNullOrWhiteSpace(branch))
-                        branch = await _gitHubService.TryGetDefaultBranchAsync() ?? "main";
+                        branch = await ResolveDefaultBranchAsync();
                     var count = Math.Clamp(ArgInt(args, "count", 10), 1, 30);
                     return await _gitHubService.GetRecentCommitsAsync(branch, count);
                 }
