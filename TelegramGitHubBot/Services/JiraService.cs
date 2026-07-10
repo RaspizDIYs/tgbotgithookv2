@@ -55,41 +55,63 @@ public sealed class JiraService
         var issues = new List<JiraIssue>();
         if (!IsConfigured) return issues;
 
-        var url = $"{_baseUrl}/rest/api/3/search?jql={Uri.EscapeDataString(jql)}&fields=summary,status,assignee&maxResults=100";
-        using var req = new HttpRequestMessage(HttpMethod.Get, url);
-        req.Headers.Authorization = new AuthenticationHeaderValue("Basic", _auth);
-        req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-        var resp = await _http.SendAsync(req);
-        if (!resp.IsSuccessStatusCode)
+        // Новый эндпоинт enhanced-JQL: старый /rest/api/3/search удалён Atlassian
+        // (HTTP 410, отключён с 2025). Пагинация — по nextPageToken; fields нужно
+        // указывать явно (по умолчанию отдаётся только id).
+        string? nextPageToken = null;
+        var safety = 0;
+        do
         {
-            Console.WriteLine($"⚠️ Jira search failed: {(int)resp.StatusCode} {resp.StatusCode}");
-            return issues;
-        }
+            var url = $"{_baseUrl}/rest/api/3/search/jql?jql={Uri.EscapeDataString(jql)}" +
+                      "&fields=summary,status,assignee&maxResults=100";
+            if (!string.IsNullOrEmpty(nextPageToken))
+                url += $"&nextPageToken={Uri.EscapeDataString(nextPageToken)}";
 
-        var bytes = await resp.Content.ReadAsByteArrayAsync();
-        using var doc = JsonDocument.Parse(bytes);
-        if (!doc.RootElement.TryGetProperty("issues", out var arr)) return issues;
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Basic", _auth);
+            req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-        foreach (var it in arr.EnumerateArray())
-        {
-            var fields = it.GetProperty("fields");
-            string? accId = null, name = null;
-            if (fields.TryGetProperty("assignee", out var asg) && asg.ValueKind == JsonValueKind.Object)
+            var resp = await _http.SendAsync(req);
+            var bytes = await resp.Content.ReadAsByteArrayAsync();
+            if (!resp.IsSuccessStatusCode)
             {
-                accId = asg.TryGetProperty("accountId", out var a) ? a.GetString() : null;
-                name = asg.TryGetProperty("displayName", out var d) ? d.GetString() : null;
+                // Не глотаем ошибку: иначе «нет задач» маскирует 401/403/410/JQL-ошибку.
+                var body = Encoding.UTF8.GetString(bytes);
+                var snippet = body.Length > 300 ? body[..300] : body;
+                throw new InvalidOperationException($"Jira {(int)resp.StatusCode} {resp.StatusCode} — {snippet}");
             }
-            issues.Add(new JiraIssue
-            {
-                Key = it.TryGetProperty("key", out var k) ? k.GetString() ?? "" : "",
-                Summary = fields.TryGetProperty("summary", out var s) ? s.GetString() ?? "" : "",
-                Status = fields.TryGetProperty("status", out var st) && st.TryGetProperty("name", out var sn) ? sn.GetString() ?? "" : "",
-                AssigneeAccountId = accId,
-                AssigneeName = name,
-            });
+
+            using var doc = JsonDocument.Parse(bytes);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("issues", out var arr))
+                foreach (var it in arr.EnumerateArray())
+                    issues.Add(ParseIssue(it));
+
+            nextPageToken = root.TryGetProperty("nextPageToken", out var tok) && tok.ValueKind == JsonValueKind.String
+                ? tok.GetString() : null;
         }
+        while (!string.IsNullOrEmpty(nextPageToken) && ++safety < 10);
+
         return issues;
+    }
+
+    private static JiraIssue ParseIssue(JsonElement it)
+    {
+        var fields = it.GetProperty("fields");
+        string? accId = null, name = null;
+        if (fields.TryGetProperty("assignee", out var asg) && asg.ValueKind == JsonValueKind.Object)
+        {
+            accId = asg.TryGetProperty("accountId", out var a) ? a.GetString() : null;
+            name = asg.TryGetProperty("displayName", out var d) ? d.GetString() : null;
+        }
+        return new JiraIssue
+        {
+            Key = it.TryGetProperty("key", out var k) ? k.GetString() ?? "" : "",
+            Summary = fields.TryGetProperty("summary", out var s) ? s.GetString() ?? "" : "",
+            Status = fields.TryGetProperty("status", out var st) && st.TryGetProperty("name", out var sn) ? sn.GetString() ?? "" : "",
+            AssigneeAccountId = accId,
+            AssigneeName = name,
+        };
     }
 
     public string RoleOf(JiraIssue issue)
