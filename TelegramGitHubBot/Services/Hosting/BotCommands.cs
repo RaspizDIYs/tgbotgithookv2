@@ -40,7 +40,7 @@ public static class BotCommands
         new() { Command = "glaicurrent", Description = "Текущий AI-агент" },
         new() { Command = "glaiswitch", Description = "Переключить AI-агента" },
         new() { Command = "glaiclear", Description = "Очистить контекст AI" },
-        new() { Command = "ask", Description = "Разовый вопрос к AI" },
+        new() { Command = "ask", Description = "Вопрос к AI (может смотреть коммиты/PR/CI/статистику)" },
         new() { Command = "tldr", Description = "Краткая выжимка обсуждения" },
         new() { Command = "settings", Description = "Настройки уведомлений" },
     };

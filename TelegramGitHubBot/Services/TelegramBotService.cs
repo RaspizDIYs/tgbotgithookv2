@@ -680,13 +680,9 @@ public partial class TelegramBotService
 
                         {
 
-                            var askResponse = await _geminiManager.GenerateResponseAsync(question);
-
-                            // /ask — чистый ответ без мемов: вырезаем теги [GIF:...]
-
-                            var cleanAnswer = System.Text.RegularExpressions.Regex.Replace(askResponse, @"\[GIF:[^\]]*\]", "").Trim();
-
-                            await _botClient.SendTextMessageAsync(chatId, cleanAnswer, disableNotification: true);
+                            // Агентный режим: LLM может дергать собственные команды бота
+                            // (коммиты, PR, CI, статистика) как инструменты и суммаризовать.
+                            await RunAgenticAskAsync(chatId, question);
 
                         }
 

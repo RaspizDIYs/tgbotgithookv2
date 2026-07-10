@@ -120,7 +120,7 @@ public partial class TelegramBotService
 🔍 /glaicurrent - Текущий агент
 🔄 /glaiswitch - Переключить агента
 🧹 /glaiclear - Очистить контекст
-❓ /ask <вопрос> - Разовый вопрос к AI
+❓ /ask <вопрос> - Вопрос к AI (может смотреть коммиты/PR/CI/статистику)
 📝 /tldr - Краткая выжимка обсуждения
 
 ⚙️ *Настройки:*
