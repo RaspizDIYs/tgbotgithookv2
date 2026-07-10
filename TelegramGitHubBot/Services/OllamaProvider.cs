@@ -29,11 +29,17 @@ public class OllamaProvider
         Console.WriteLine($"🦙 OllamaProvider: {_baseUrl}/v1/chat/completions (модель: {_model}, auth: {(!string.IsNullOrEmpty(_basicAuth) ? "basic" : "нет")})");
     }
 
-    public async Task<string> GenerateResponseAsync(string prompt)
+    public Task<string> GenerateResponseAsync(string prompt) => GenerateResponseAsync(prompt, raw: false);
+
+    /// <param name="raw">true — нейтральный системный промпт (для служебных вызовов, где нужен чистый JSON).</param>
+    public async Task<string> GenerateResponseAsync(string prompt, bool raw)
     {
+        var system = raw
+            ? "Ты — точный инструментальный ассистент. Следуй инструкции буквально. Если просят вернуть только JSON — верни только JSON, без пояснений и без markdown."
+            : GetSystemPrompt();
         var messages = new List<object>
         {
-            new { role = "system", content = GetSystemPrompt() },
+            new { role = "system", content = system },
             new { role = "user", content = prompt },
         };
         return await SendAsync(messages);

@@ -83,11 +83,16 @@ public class GeminiManager
         }
     }
 
-    public async Task<string> GenerateResponseAsync(string prompt)
+    public Task<string> GenerateResponseAsync(string prompt) => GenerateAsync(prompt, raw: false);
+
+    /// <summary>Генерация без «GIF-персоны» — для служебных вызовов агента (планировщик, где нужен чистый JSON).</summary>
+    public Task<string> GenerateRawResponseAsync(string prompt) => GenerateAsync(prompt, raw: true);
+
+    private async Task<string> GenerateAsync(string prompt, bool raw)
     {
         if (_ollama != null)
         {
-            return await _ollama.GenerateResponseAsync(prompt);
+            return await _ollama.GenerateResponseAsync(prompt, raw);
         }
 
         if (_agents.Count == 0)
@@ -111,7 +116,7 @@ public class GeminiManager
             try
             {
                 Console.WriteLine($"🔄 Попытка {attempts + 1}/{_agents.Count}: {currentAgent.Name}");
-                var response = await currentAgent.GenerateResponseAsync(prompt);
+                var response = await currentAgent.GenerateResponseAsync(prompt, raw);
                 
                 // Если ответ успешный, возвращаем его
                 if (!response.Contains("❌") && !response.Contains("⚠️"))
