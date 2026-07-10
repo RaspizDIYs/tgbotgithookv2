@@ -188,10 +188,12 @@ public class GeminiAgent
             var json = JsonSerializer.Serialize(requestBody);
             var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
-            _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.Add("x-goog-api-key", _apiKey);
+            // Заголовок на уровне запроса, а не DefaultRequestHeaders — иначе при
+            // конкурентных вызовах агенты затирают ключ друг другу (гонка → 401/429).
+            using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl) { Content = content };
+            request.Headers.Add("x-goog-api-key", _apiKey);
 
-            var response = await _httpClient.PostAsync(_baseUrl, content);
+            var response = await _httpClient.SendAsync(request);
             
             // Увеличиваем счетчики после успешного запроса
             var estimatedTokens = prompt.Length / 4 + 100; // Примерная оценка токенов

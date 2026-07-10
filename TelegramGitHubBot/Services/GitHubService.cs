@@ -175,7 +175,7 @@ public class GitHubService
             {
                 var latestCommit = await _client.Repository.Commit.Get(_owner, _repo, defaultBranch.Commit.Sha);
                 status += $"\n📝 Последний коммит:\n" +
-                         $"• SHA: `{latestCommit.Sha[..8]}`\n" +
+                         $"• SHA: `{ShaUtils.Short(latestCommit.Sha)}`\n" +
                          $"• Автор: {latestCommit.Commit.Author.Name}\n" +
                          $"• Сообщение: {latestCommit.Commit.Message.Split('\n')[0]}\n" +
                          $"• Дата: {latestCommit.Commit.Author.Date:dd.MM.yyyy HH:mm}";
@@ -206,7 +206,7 @@ public class GitHubService
                 var author = commit.Commit.Author.Name;
                 var message = commit.Commit.Message.Split('\n')[0];
                 var date = commit.Commit.Author.Date;
-                var sha = commit.Sha[..8];
+                var sha = ShaUtils.Short(commit.Sha);
 
                 result += $"🔹 `{sha}` - {author}\n" +
                          $"   _{message}_\n" +
@@ -248,7 +248,7 @@ public class GitHubService
                     }
                     catch
                     {
-                        result += $"   📝 Последний коммит: {branch.Commit.Sha[..8]}\n\n";
+                        result += $"   📝 Последний коммит: {ShaUtils.Short(branch.Commit.Sha)}\n\n";
                     }
                 }
             }
@@ -348,6 +348,20 @@ public class GitHubService
         }
     }
 
+    /// <summary>Resolves a short SHA to the full 40-char SHA via the GitHub API, or null if not found.</summary>
+    public async Task<string?> ResolveFullShaAsync(string shortSha)
+    {
+        try
+        {
+            var commit = await _client.Repository.Commit.Get(_owner, _repo, shortSha);
+            return commit.Sha;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public async Task<string> GetCommitDetailsAsync(string commitSha)
     {
         try
@@ -412,7 +426,7 @@ public class GitHubService
                 details += $"\n👨‍👩‍👧‍👦 Родительские коммиты:\n";
                 foreach (var parent in commit.Parents.Take(3))
                 {
-                    details += $"• `{parent.Sha[..8]}`\n";
+                    details += $"• `{ShaUtils.Short(parent.Sha)}`\n";
                 }
             }
 
@@ -625,7 +639,7 @@ public class GitHubService
                 var author = commit.Commit.Author.Name;
                 var message = commit.Commit.Message.Split('\n')[0];
                 var date = commit.Commit.Author.Date;
-                var sha = commit.Sha[..8];
+                var sha = ShaUtils.Short(commit.Sha);
 
                 result += $"🔹 `{sha}` - {author}\n" +
                          $"   _{message}_\n" +
@@ -680,9 +694,9 @@ public class GitHubService
             var commit = await _client.Repository.Commit.Get(_owner, _repo, commitSha);
 
             if (commit.Files?.Any() != true)
-                return $"📁 *Файлы в коммите {commitSha[..8]}:*\n\nФайлы не найдены";
+                return $"📁 *Файлы в коммите {ShaUtils.Short(commitSha)}:*\n\nФайлы не найдены";
 
-            var result = $"📁 *Файлы в коммите {commitSha[..8]}:*\n\n";
+            var result = $"📁 *Файлы в коммите {ShaUtils.Short(commitSha)}:*\n\n";
 
             foreach (var file in commit.Files.Take(15))
             {

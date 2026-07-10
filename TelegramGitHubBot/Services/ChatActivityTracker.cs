@@ -26,7 +26,8 @@ public class ChatActivityTracker
     public async Task TrackMessageAsync(long chatId, long userId, string username, string messageText, DateTime timestamp)
     {
         var activity = _chatActivities.GetOrAdd(chatId, _ => new ChatActivity());
-        
+        var shouldSendMeme = false;
+
         lock (activity)
         {
             // Добавляем сообщение
@@ -48,10 +49,17 @@ public class ChatActivityTracker
                 activity.AIActivated = true;
                 activity.AIActivationTime = timestamp;
             }
+
+            // Атомарно «застолбляем» отправку мема, чтобы два параллельных
+            // сообщения не отправили его дважды.
+            if (activity.AIActivated && !activity.MemeSent)
+            {
+                activity.MemeSent = true;
+                shouldSendMeme = true;
+            }
         }
 
-        // Если AI активирован, анализируем контекст и отправляем мем
-        if (activity.AIActivated && !activity.MemeSent)
+        if (shouldSendMeme)
         {
             await AnalyzeAndSendMemeAsync(chatId, activity);
         }
@@ -92,9 +100,9 @@ public class ChatActivityTracker
                     InputFile.FromUri(meme.Url), 
                     caption: $"🎬 {meme.Title}", 
                     disableNotification: true);
-                
-                activity.MemeSent = true;
-                
+
+                // MemeSent уже выставлен атомарно в TrackMessageAsync под локом.
+
                 // Отправляем сообщение о том, что AI присоединился к диалогу
                 await _botClient.SendTextMessageAsync(chatId, 
                     "🤖 *AI присоединился к диалогу!*\n\nОбнаружил оживленную беседу и решил добавить мем 😄\n\nТеперь AI активен и будет отвечать на сообщения!", 

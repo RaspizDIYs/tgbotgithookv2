@@ -321,42 +321,45 @@ public class GeminiManager
 
     private void AddMessageToContext(long chatId, string role, string content)
     {
-        if (!_chatContexts.ContainsKey(chatId))
+        lock (_lockObject)
         {
-            _chatContexts[chatId] = new List<ChatMessage>();
-        }
+            if (!_chatContexts.TryGetValue(chatId, out var list))
+            {
+                list = new List<ChatMessage>();
+                _chatContexts[chatId] = list;
+            }
 
-        _chatContexts[chatId].Add(new ChatMessage
-        {
-            Role = role,
-            Content = content,
-            Timestamp = DateTime.UtcNow
-        });
+            list.Add(new ChatMessage
+            {
+                Role = role,
+                Content = content,
+                Timestamp = DateTime.UtcNow
+            });
 
-        // Ограничиваем количество сообщений в контексте
-        if (_chatContexts[chatId].Count > MAX_CONTEXT_MESSAGES)
-        {
-            _chatContexts[chatId] = _chatContexts[chatId]
-                .TakeLast(MAX_CONTEXT_MESSAGES)
-                .ToList();
+            // Ограничиваем количество сообщений в контексте
+            if (list.Count > MAX_CONTEXT_MESSAGES)
+            {
+                _chatContexts[chatId] = list.TakeLast(MAX_CONTEXT_MESSAGES).ToList();
+            }
         }
     }
 
     private string BuildContextPrompt(long chatId)
     {
-        if (!_chatContexts.ContainsKey(chatId) || _chatContexts[chatId].Count == 0)
+        lock (_lockObject)
         {
-            return _chatContexts[chatId].LastOrDefault()?.Content ?? "";
-        }
+            if (!_chatContexts.TryGetValue(chatId, out var list) || list.Count == 0)
+            {
+                return ""; // Нет контекста — раньше здесь был KeyNotFoundException.
+            }
 
-        var context = "Контекст предыдущего разговора:\n\n";
-        
-        foreach (var message in _chatContexts[chatId].TakeLast(10)) // Берем последние 10 сообщений для контекста
-        {
-            context += $"{message.Role}: {message.Content}\n\n";
+            var context = "Контекст предыдущего разговора:\n\n";
+            foreach (var message in list.TakeLast(10)) // последние 10 сообщений
+            {
+                context += $"{message.Role}: {message.Content}\n\n";
+            }
+            return context;
         }
-
-        return context;
     }
 
     public void ClearContext(long chatId)
@@ -367,9 +370,12 @@ public class GeminiManager
             return;
         }
 
-        if (_chatContexts.ContainsKey(chatId))
+        lock (_lockObject)
         {
-            _chatContexts[chatId].Clear();
+            if (_chatContexts.TryGetValue(chatId, out var list))
+            {
+                list.Clear();
+            }
         }
     }
 

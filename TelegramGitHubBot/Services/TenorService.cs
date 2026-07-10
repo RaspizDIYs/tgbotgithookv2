@@ -14,12 +14,7 @@ public class TenorService
         _httpClient = httpClient;
         _apiKey = configuration["TENOR_API_KEY"] ?? throw new InvalidOperationException("TENOR_API_KEY not configured");
         
-        // Отладочная информация
-        Console.WriteLine($"🔑 Tenor API Key: {(_apiKey.Length > 20 ? _apiKey.Substring(0, 20) + "..." : "NOT FOUND")}");
-        if (_apiKey.Length < 20)
-        {
-            Console.WriteLine("⚠️ WARNING: Tenor API Key seems too short!");
-        }
+        Console.WriteLine($"🔑 Tenor API Key: {(_apiKey.Length >= 20 ? "configured" : "too short — check TENOR_API_KEY")}");
     }
 
     public async Task<List<TenorGif>> SearchGifsAsync(string query, int limit = 10)
@@ -27,7 +22,7 @@ public class TenorService
         try
         {
             var url = $"https://tenor.googleapis.com/v2/search?q={Uri.EscapeDataString(query)}&key={_apiKey}&client_key=telegram_bot&limit={limit}&media_filter=gif&contentfilter=medium";
-            Console.WriteLine($"🔍 Tenor Search URL: {url}");
+            Console.WriteLine($"🔍 Tenor search: q={query}, limit={limit}");
             
             var httpResponse = await _httpClient.GetAsync(url);
             if (!httpResponse.IsSuccessStatusCode)
@@ -69,7 +64,7 @@ public class TenorService
         try
         {
             var url = $"https://tenor.googleapis.com/v2/trending?key={_apiKey}&client_key=telegram_bot&limit={limit}&media_filter=gif&contentfilter=medium";
-            Console.WriteLine($"📈 Tenor Trending URL: {url}");
+            Console.WriteLine($"📈 Tenor trending: limit={limit}");
             
             var httpResponse = await _httpClient.GetAsync(url);
             if (!httpResponse.IsSuccessStatusCode)
