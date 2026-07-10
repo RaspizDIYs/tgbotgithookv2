@@ -36,6 +36,8 @@ public static class BotCommands
         new() { Command = "recalc", Description = "Пересчёт статистики" },
         new() { Command = "jira", Description = "Быстрый дайджест задач Jira (KAN) по ролям" },
         new() { Command = "digest", Description = "Утренний дайджест-план (Jira срезы + GlitchTip + ИИ)" },
+        new() { Command = "stale", Description = "Зависшие задачи Jira (без движения N дней)" },
+        new() { Command = "monthly", Description = "Месячная сводка «что нового» по закрытым задачам" },
         new() { Command = "glaistart", Description = "Включить режим AI" },
         new() { Command = "glaistop", Description = "Выключить режим AI" },
         new() { Command = "glaistats", Description = "Статус всех AI-агентов" },

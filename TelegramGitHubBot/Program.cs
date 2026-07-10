@@ -76,6 +76,7 @@ if (hasTelegram && pollingEnabled)
 {
     builder.Services.AddHostedService<TelegramPollingService>();
     builder.Services.AddHostedService<RepositoryScannerService>();
+    builder.Services.AddHostedService<ScheduledReportsService>();
     if (selfPingEnabled)
         builder.Services.AddHostedService<SelfPingService>();
 }
