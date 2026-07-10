@@ -13,6 +13,7 @@ public partial class TelegramBotService
     private async Task SendWelcomeMessageAsync(long chatId)
 
     {
+        _navigationStack.Remove(chatId); // верхнеуровневый экран — сбрасываем цепочку «назад»
 
         var message = @"🤖 *GitHub Monitor Bot*
 
@@ -72,25 +73,14 @@ public partial class TelegramBotService
 
 
 
-        await _botClient.SendTextMessageAsync(
-
-            chatId: chatId,
-
-            text: message,
-
-            parseMode: ParseMode.Markdown,
-
-            disableNotification: true,
-
-            replyMarkup: inlineKeyboard
-
-        );
+        await ShowNavScreenAsync(chatId, message, inlineKeyboard);
 
     }
 
     private async Task SendHelpMessageAsync(long chatId)
 
     {
+        _navigationStack.Remove(chatId); // верхнеуровневый экран — сбрасываем цепочку «назад»
 
         var message = @"📋 *Справка по боту*
 
@@ -185,19 +175,7 @@ public partial class TelegramBotService
 
 
 
-        await _botClient.SendTextMessageAsync(
-
-            chatId: chatId,
-
-            text: message,
-
-            parseMode: ParseMode.Markdown,
-
-            disableNotification: true,
-
-            replyMarkup: inlineKeyboard
-
-        );
+        await ShowNavScreenAsync(chatId, message, inlineKeyboard);
 
     }
 
@@ -369,21 +347,7 @@ help - полный список команд";
 
 
 
-        await _botClient.SendTextMessageAsync(
-
-            chatId: chatId,
-
-            text: message,
-
-            parseMode: ParseMode.Markdown,
-
-            disableWebPagePreview: true,
-
-            disableNotification: true,
-
-            replyMarkup: keyboard
-
-        );
+        await ShowNavScreenAsync(chatId, message, keyboard);
 
     }
 }
