@@ -46,6 +46,55 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
     Console.WriteLine($"✅ Telegram Bot Token configured (length: {telegramToken.Length})");
     var botClient = new TelegramBotClient(telegramToken.Trim());
     builder.Services.AddSingleton<ITelegramBotClient>(botClient);
+
+    // Регистрируем меню команд в Telegram (только актуальный набор)
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            await botClient.SetMyCommandsAsync(new[]
+            {
+                new Telegram.Bot.Types.BotCommand { Command = "start", Description = "Главное меню" },
+                new Telegram.Bot.Types.BotCommand { Command = "help", Description = "Справка по командам" },
+                new Telegram.Bot.Types.BotCommand { Command = "info", Description = "Подробная информация" },
+                new Telegram.Bot.Types.BotCommand { Command = "status", Description = "Статус репозитория" },
+                new Telegram.Bot.Types.BotCommand { Command = "commits", Description = "Коммиты [ветка] [кол-во]" },
+                new Telegram.Bot.Types.BotCommand { Command = "branches", Description = "Список веток" },
+                new Telegram.Bot.Types.BotCommand { Command = "prs", Description = "Открытые Pull Request" },
+                new Telegram.Bot.Types.BotCommand { Command = "ci", Description = "CI/CD статус [ветка]" },
+                new Telegram.Bot.Types.BotCommand { Command = "deploy", Description = "Деплой [среда]" },
+                new Telegram.Bot.Types.BotCommand { Command = "search", Description = "Поиск по коммитам" },
+                new Telegram.Bot.Types.BotCommand { Command = "authors", Description = "Активные авторы" },
+                new Telegram.Bot.Types.BotCommand { Command = "files", Description = "Файлы в коммите <sha>" },
+                new Telegram.Bot.Types.BotCommand { Command = "ratelimit", Description = "Лимиты GitHub API" },
+                new Telegram.Bot.Types.BotCommand { Command = "cache", Description = "Информация о кэше" },
+                new Telegram.Bot.Types.BotCommand { Command = "protection", Description = "Защита веток" },
+                new Telegram.Bot.Types.BotCommand { Command = "backup", Description = "Резервное копирование" },
+                new Telegram.Bot.Types.BotCommand { Command = "laststats", Description = "Последняя статистика" },
+                new Telegram.Bot.Types.BotCommand { Command = "weekstats", Description = "Статистика по неделям" },
+                new Telegram.Bot.Types.BotCommand { Command = "rating", Description = "Рейтинг разработчиков" },
+                new Telegram.Bot.Types.BotCommand { Command = "trends", Description = "Тренды активности" },
+                new Telegram.Bot.Types.BotCommand { Command = "achievements", Description = "Список ачивок" },
+                new Telegram.Bot.Types.BotCommand { Command = "leaderboard", Description = "Таблица лидеров" },
+                new Telegram.Bot.Types.BotCommand { Command = "streaks", Description = "Топ стриков" },
+                new Telegram.Bot.Types.BotCommand { Command = "recalc", Description = "Пересчёт статистики" },
+                new Telegram.Bot.Types.BotCommand { Command = "glaistart", Description = "Включить режим AI" },
+                new Telegram.Bot.Types.BotCommand { Command = "glaistop", Description = "Выключить режим AI" },
+                new Telegram.Bot.Types.BotCommand { Command = "glaistats", Description = "Статус всех AI-агентов" },
+                new Telegram.Bot.Types.BotCommand { Command = "glaicurrent", Description = "Текущий AI-агент" },
+                new Telegram.Bot.Types.BotCommand { Command = "glaiswitch", Description = "Переключить AI-агента" },
+                new Telegram.Bot.Types.BotCommand { Command = "glaiclear", Description = "Очистить контекст AI" },
+                new Telegram.Bot.Types.BotCommand { Command = "ask", Description = "Разовый вопрос к AI" },
+                new Telegram.Bot.Types.BotCommand { Command = "tldr", Description = "Краткая выжимка обсуждения" },
+                new Telegram.Bot.Types.BotCommand { Command = "settings", Description = "Настройки уведомлений" },
+            });
+            Console.WriteLine("✅ Telegram command menu registered");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"⚠️  Failed to register command menu: {ex.Message}");
+        }
+    });
     builder.Services.AddSingleton<TelegramBotService>();
     builder.Services.AddHttpClient<GeminiManager>();
     builder.Services.AddSingleton<GeminiManager>();
@@ -83,10 +132,7 @@ if (!string.IsNullOrWhiteSpace(telegramToken))
                 var httpClient = new HttpClient();
                 var geminiManager = new GeminiManager(httpClient, builder.Configuration);
                 var tenorService = new TenorService(httpClient, builder.Configuration);
-#pragma warning disable CA1416 // Validate platform compatibility
-                var gifTextEditorService = new GifTextEditorService(httpClient);
-#pragma warning restore CA1416 // Validate platform compatibility
-                var telegramService = new TelegramBotService(botClient, githubService, achievementService, geminiManager, messageStatsService, tenorService, gifTextEditorService);
+                var telegramService = new TelegramBotService(botClient, githubService, achievementService, geminiManager, messageStatsService, tenorService);
 
                 int? lastUpdateId = null;
 
@@ -274,9 +320,6 @@ builder.Services.AddSingleton<AchievementService>();
 builder.Services.AddSingleton<MessageStatsService>();
 builder.Services.AddSingleton<WebhookHandlerService>();
 builder.Services.AddHttpClient<TenorService>();
-#pragma warning disable CA1416 // Validate platform compatibility
-builder.Services.AddHttpClient<GifTextEditorService>();
-#pragma warning restore CA1416 // Validate platform compatibility
 
 var app = builder.Build();
 
@@ -500,35 +543,6 @@ app.MapPost("/api/ai/start", async (HttpContext context, TelegramBotService tele
 });
 
 // Универсальный проброс текстовой команды бота из WebApp
-app.MapPost("/api/bot/command", async (HttpContext context, TelegramBotService telegramService) =>
-{
-    try
-    {
-        using var reader = new StreamReader(context.Request.Body);
-        var body = await reader.ReadToEndAsync();
-        var payload = System.Text.Json.JsonDocument.Parse(body);
-        var command = payload.RootElement.GetProperty("command").GetString() ?? string.Empty;
-        var chatIdStr = payload.RootElement.TryGetProperty("chatId", out var c) ? c.GetString() : null;
-        if (string.IsNullOrWhiteSpace(command))
-            return Results.BadRequest("command is required");
-        long chatId = 0;
-        if (!string.IsNullOrWhiteSpace(chatIdStr)) long.TryParse(chatIdStr, out chatId);
-        if (chatId == 0)
-        {
-            var envChat = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID");
-            if (!string.IsNullOrWhiteSpace(envChat) && long.TryParse(envChat, out var envChatId)) chatId = envChatId;
-        }
-        if (chatId == 0) return Results.BadRequest("chatId is required (or set TELEGRAM_CHAT_ID)");
-
-        var result = await telegramService.HandleCommandForWebAppAsync(chatId, command);
-        return Results.Ok(result);
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem($"Error sending command: {ex.Message}");
-    }
-});
-
 app.MapPost("/api/ai/stop", async (HttpContext context, TelegramBotService telegramService) =>
 {
     try
@@ -674,8 +688,5 @@ app.MapGet("/api/stats/leaderboard", (AchievementService achievementService) =>
         return Results.Problem($"Error getting leaderboard: {ex.Message}");
     }
 });
-
-// Web App main page
-app.MapGet("/webapp", () => Results.Redirect("/webapp/index.html"));
 
 app.Run();

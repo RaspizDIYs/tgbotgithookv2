@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "@google/genai": "^1.22.0",
-    "@radix-ui/react-tooltip": "^1.2.8"
-  }
-}
