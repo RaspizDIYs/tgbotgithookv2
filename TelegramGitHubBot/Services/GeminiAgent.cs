@@ -163,9 +163,10 @@ public class GeminiAgent
                 return $"❌ **{_agentName}: Лимиты исчерпаны!**\n\n" + GetStatus();
             }
 
-            // В raw-режиме не подмешиваем GIF-персону — иначе модель отвечает
-            // болтовнёй вместо строгого JSON и tool-calling ломается.
-            var fullPrompt = raw ? prompt : $"{GetSystemPrompt()}\n\n{prompt}";
+            // В raw-режиме вместо GIF-персоны — жёсткий guard (русский язык, без
+            // дрейфа в китайский и без выдумывания диалога), иначе модель отвечает
+            // болтовнёй/на другом языке и tool-calling ломается.
+            var fullPrompt = raw ? $"{OllamaProvider.RawGuard}\n\n{prompt}" : $"{GetSystemPrompt()}\n\n{prompt}";
 
             var requestBody = new
             {

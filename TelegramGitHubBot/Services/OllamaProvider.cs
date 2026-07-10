@@ -34,16 +34,23 @@ public class OllamaProvider
     /// <param name="raw">true — нейтральный системный промпт (для служебных вызовов, где нужен чистый JSON).</param>
     public async Task<string> GenerateResponseAsync(string prompt, bool raw)
     {
-        var system = raw
-            ? "Ты — точный инструментальный ассистент. Следуй инструкции буквально. Если просят вернуть только JSON — верни только JSON, без пояснений и без markdown."
-            : GetSystemPrompt();
+        var system = raw ? RawGuard : GetSystemPrompt();
         var messages = new List<object>
         {
             new { role = "system", content = system },
             new { role = "user", content = prompt },
         };
-        return await SendAsync(messages);
+        // Низкая температура в raw-режиме: меньше дрейфа в другой язык и меньше
+        // «дописывания» фейкового диалога.
+        return await SendAsync(messages, raw ? 0.2 : 0.7);
     }
+
+    // Жёсткий guard для служебных вызовов: русский язык, без дрейфа в китайский,
+    // без выдумывания реплик и продолжения диалога.
+    internal const string RawGuard =
+        "Следуй инструкции буквально. Пиши ТОЛЬКО на русском языке и никогда не переключайся на другой язык (особенно китайский). " +
+        "Не выдумывай реплики пользователя и не продолжай диалог за него — дай один ответ и остановись. " +
+        "Если просят вернуть только JSON — верни только JSON, без пояснений и без markdown.";
 
     public async Task<string> GenerateResponseWithContextAsync(string prompt, long chatId)
     {
@@ -65,7 +72,7 @@ public class OllamaProvider
         return response;
     }
 
-    private async Task<string> SendAsync(List<object> messages)
+    private async Task<string> SendAsync(List<object> messages, double temperature = 0.7)
     {
         try
         {
@@ -74,7 +81,7 @@ public class OllamaProvider
                 model = _model,
                 messages = messages.ToArray(),
                 stream = false,
-                temperature = 0.7,
+                temperature,
             };
 
             var json = JsonSerializer.Serialize(requestBody);
