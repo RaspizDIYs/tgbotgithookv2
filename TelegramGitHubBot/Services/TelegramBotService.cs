@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 
 using System.Timers;
 
@@ -59,7 +60,7 @@ public class TelegramBotService
 
     private readonly Queue<(int id, DateTime ts)> _processedUpdateTimestamps = new();
 
-    private readonly Dictionary<string, System.Timers.Timer> _messageTimers = new();
+    private readonly ConcurrentDictionary<string, System.Timers.Timer> _messageTimers = new();
 
     private static System.Timers.Timer? _dailySummaryTimer;
 
@@ -2848,7 +2849,7 @@ public class TelegramBotService
 
                 timer.Dispose();
 
-                _messageTimers.Remove(timerKey);
+                _messageTimers.TryRemove(timerKey, out _);
 
             }
 
@@ -2994,7 +2995,11 @@ public class TelegramBotService
 
             _dailySummaryTimer = new System.Timers.Timer();
 
-            _dailySummaryTimer.Elapsed += async (sender, e) => await SendDailySummaryAsync();
+            _dailySummaryTimer.Elapsed += async (sender, e) =>
+            {
+                try { await SendDailySummaryAsync(); }
+                catch (Exception ex) { Console.WriteLine($"❌ Daily summary error: {ex.Message}"); }
+            };
 
             _dailySummaryTimer.AutoReset = false; // Отключаем автоповтор
 

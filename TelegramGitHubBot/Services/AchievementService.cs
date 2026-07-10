@@ -1,5 +1,6 @@
 using TelegramGitHubBot.Models;
 using System.Text.Json;
+using System.Collections.Concurrent;
 using Octokit;
 
 namespace TelegramGitHubBot.Services;
@@ -26,8 +27,8 @@ public class CachedStats
 
 public class AchievementService
 {
-    private readonly Dictionary<long, UserStats> _userStats = new();
-    private readonly Dictionary<string, Achievement> _achievements = new();
+    private readonly ConcurrentDictionary<long, UserStats> _userStats = new();
+    private readonly ConcurrentDictionary<string, Achievement> _achievements = new();
     private readonly List<AchievementDefinition> _achievementDefinitions;
     private readonly string _dataDir;
     private readonly string _dataFilePath;
@@ -38,7 +39,8 @@ public class AchievementService
     private readonly string _persistPath = "tgbot_stats.json";
     private readonly string _persistBranch = "main";
     private GitHubClient? _ghClient;
-    private readonly HashSet<string> _processedShas = new();
+    // ConcurrentDictionary как потокобезопасное множество: атомарный TryAdd для дедупа SHA.
+    private readonly ConcurrentDictionary<string, byte> _processedShas = new();
     
     // Настройки кэша
     private readonly int _maxProcessedShas = 10000; // Максимум SHA в кэше
@@ -58,7 +60,7 @@ public class AchievementService
     private readonly object _lockObject = new object(); // Блокировка для конкурентного доступа
     
     // Кэш статистики
-    private readonly Dictionary<string, CachedStats> _statsCache = new();
+    private readonly ConcurrentDictionary<string, CachedStats> _statsCache = new();
     private readonly int _maxCachedStats = 100;
     private readonly int _statsCacheDays = 7;
     private DateTime _lastAutoRefresh = DateTime.MinValue;
@@ -334,9 +336,9 @@ public class AchievementService
             ProcessCommit(author, email, commitMessage, commitDate, linesAdded, linesDeleted);
             return;
         }
-        if (_processedShas.Contains(sha)) return;
+        if (_processedShas.ContainsKey(sha)) return;
         ProcessCommit(author, email, commitMessage, commitDate, linesAdded, linesDeleted);
-        _processedShas.Add(sha);
+        _processedShas.TryAdd(sha, 0);
         SaveProcessedShas();
     }
 
@@ -365,17 +367,12 @@ public class AchievementService
 
     private UserStats GetOrCreateUserStats(long userId, string author)
     {
-        if (!_userStats.TryGetValue(userId, out var stats))
+        return _userStats.GetOrAdd(userId, _ => new UserStats
         {
-            stats = new UserStats
-            {
-                TelegramUserId = userId,
-                Username = author,
-                DisplayName = author
-            };
-            _userStats[userId] = stats;
-        }
-        return stats;
+            TelegramUserId = userId,
+            Username = author,
+            DisplayName = author
+        });
     }
 
     private void UpdateStreak(UserStats stats, DateTime commitDate)
@@ -790,7 +787,7 @@ public class AchievementService
                 var data = JsonSerializer.Deserialize<HashSet<string>>(json);
                 if (data != null)
                 {
-                    foreach (var sha in data) _processedShas.Add(sha);
+                    foreach (var sha in data) _processedShas.TryAdd(sha, 0);
                 }
             }
         }
@@ -807,7 +804,7 @@ public class AchievementService
             // Очищаем старые SHA если их слишком много
             CleanupProcessedShas();
             
-            var json = JsonSerializer.Serialize(_processedShas, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(_processedShas.Keys.ToList(), new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_processedShasFilePath, json);
         }
         catch (Exception ex)
@@ -821,13 +818,13 @@ public class AchievementService
         if (_processedShas.Count <= _maxProcessedShas) return;
         
         // Оставляем только последние SHA (новые коммиты важнее старых)
-        var shasToKeep = _processedShas.TakeLast(_maxProcessedShas).ToHashSet();
+        var shasToKeep = _processedShas.Keys.TakeLast(_maxProcessedShas).ToHashSet();
         var removedCount = _processedShas.Count - shasToKeep.Count;
         
         _processedShas.Clear();
         foreach (var sha in shasToKeep)
         {
-            _processedShas.Add(sha);
+            _processedShas.TryAdd(sha, 0);
         }
         
         Console.WriteLine($"🧹 Очищено {removedCount} старых SHA из кэша (осталось {_processedShas.Count})");
@@ -847,7 +844,7 @@ public class AchievementService
         
         foreach (var user in usersToRemove)
         {
-            _userStats.Remove(user.TelegramUserId);
+            _userStats.TryRemove(user.TelegramUserId, out _);
         }
         
         Console.WriteLine($"🧹 Удалено {usersToRemove.Count} неактивных пользователей (неактивны > {_inactiveDaysThreshold} дней)");
@@ -921,7 +918,7 @@ public class AchievementService
             
         foreach (var key in toRemove)
         {
-            _statsCache.Remove(key);
+            _statsCache.TryRemove(key, out _);
         }
         
         Console.WriteLine($"🧹 Очищено {toRemove.Count} устаревших записей из кэша статистики");
@@ -941,12 +938,12 @@ public class AchievementService
             .ToList();
             
         // Сохраняем последние обработанные SHA (важно для избежания дублирования)
-        var recentShas = _processedShas.Take(_maxProcessedShas).ToList();
+        var recentShas = _processedShas.Keys.Take(_maxProcessedShas).ToList();
         
         // Временно сохраняем только активные данные
         var tempUserStats = _userStats.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         var tempAchievements = _achievements.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-        var tempProcessedShas = _processedShas.ToHashSet();
+        var tempProcessedShas = _processedShas.Keys.ToHashSet();
         
         // Очищаем основные коллекции
         _userStats.Clear();
@@ -966,7 +963,7 @@ public class AchievementService
         
         foreach (var sha in recentShas)
         {
-            _processedShas.Add(sha);
+            _processedShas.TryAdd(sha, 0);
         }
         
         // Сохраняем очищенные данные
