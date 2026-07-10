@@ -90,21 +90,7 @@ public partial class TelegramBotService
 
 
 
-        await _botClient.SendTextMessageAsync(
-
-            chatId: chatId,
-
-            text: message,
-
-            parseMode: ParseMode.Markdown,
-
-            disableWebPagePreview: true,
-
-            disableNotification: true,
-
-            replyMarkup: inlineKeyboard
-
-        );
+        await ShowNavScreenAsync(chatId, message, inlineKeyboard);
 
     }
 

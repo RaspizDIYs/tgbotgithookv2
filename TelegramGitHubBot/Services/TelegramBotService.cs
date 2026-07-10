@@ -77,6 +77,7 @@ public partial class TelegramBotService
     private const int MAX_RECENT_MESSAGES = 100;
 
     private readonly TenorService _tenorService;
+    private readonly JiraService _jiraService;
 
     private readonly ChatActivityTracker _chatActivityTracker;
 
@@ -85,9 +86,15 @@ public partial class TelegramBotService
 
     private readonly Dictionary<long, Stack<string>> _navigationStack = new(); // Стек навигации для каждого чата
 
+    // «Живой» навигационный экран на чат: один экран, который редактируется на месте
+    // вместо спама новыми сообщениями. _pendingEditMessageId выставляется на время
+    // обработки callback, чтобы рендер редактировал именно нажатое сообщение.
+    private readonly ConcurrentDictionary<long, int> _navMessageId = new();
+    private readonly ConcurrentDictionary<long, int> _pendingEditMessageId = new();
 
 
-    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService, TenorService tenorService)
+
+    public TelegramBotService(ITelegramBotClient botClient, GitHubService gitHubService, AchievementService achievementService, GeminiManager geminiManager, MessageStatsService messageStatsService, TenorService tenorService, JiraService jiraService)
 
     {
 
@@ -102,6 +109,8 @@ public partial class TelegramBotService
         _messageStatsService = messageStatsService ?? throw new ArgumentNullException(nameof(messageStatsService));
 
         _tenorService = tenorService ?? throw new ArgumentNullException(nameof(tenorService));
+
+        _jiraService = jiraService ?? throw new ArgumentNullException(nameof(jiraService));
 
         
 
@@ -674,13 +683,9 @@ public partial class TelegramBotService
 
                         {
 
-                            var askResponse = await _geminiManager.GenerateResponseAsync(question);
-
-                            // /ask — чистый ответ без мемов: вырезаем теги [GIF:...]
-
-                            var cleanAnswer = System.Text.RegularExpressions.Regex.Replace(askResponse, @"\[GIF:[^\]]*\]", "").Trim();
-
-                            await _botClient.SendTextMessageAsync(chatId, cleanAnswer, disableNotification: true);
+                            // Агентный режим: LLM может дергать собственные команды бота
+                            // (коммиты, PR, CI, статистика) как инструменты и суммаризовать.
+                            await RunAgenticAskAsync(chatId, question);
 
                         }
 
@@ -986,6 +991,14 @@ public partial class TelegramBotService
 
                     break;
 
+                case "/jira":
+
+                case "/kan":
+
+                    await HandleJiraDigestAsync(chatId);
+
+                    break;
+
 
 
 
@@ -1067,45 +1080,60 @@ public partial class TelegramBotService
 
 
     private async Task SendMessageWithBackButtonAsync(long chatId, string message, string? backCommand = null, ParseMode parseMode = ParseMode.Markdown)
-
     {
-
         var actualBackCommand = backCommand ?? PeekNavigation(chatId) ?? "/help";
-
         var inlineKeyboard = new InlineKeyboardMarkup(new[]
-
         {
-
             new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", actualBackCommand) }
-
         });
-
-
-
-        await _botClient.SendTextMessageAsync(chatId, message, parseMode: parseMode, replyMarkup: inlineKeyboard, disableNotification: true);
-
+        await ShowNavScreenAsync(chatId, message, inlineKeyboard, parseMode);
     }
 
-
-
     private async Task EditMessageWithBackButtonAsync(long chatId, int messageId, string message, string? backCommand = null, ParseMode parseMode = ParseMode.Markdown)
-
     {
-
         var actualBackCommand = backCommand ?? PeekNavigation(chatId) ?? "/help";
-
         var inlineKeyboard = new InlineKeyboardMarkup(new[]
-
         {
-
             new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", actualBackCommand) }
-
         });
-
-
-
         await _botClient.EditMessageTextAsync(chatId, messageId, message, parseMode: parseMode, replyMarkup: inlineKeyboard);
+        _navMessageId[chatId] = messageId;
+    }
 
+    /// <summary>
+    /// Рендерит «живой» навигационный экран чата. Если известен id текущего экрана
+    /// (нажатая кнопка или предыдущий экран) — редактирует его на месте, иначе шлёт
+    /// новое сообщение. Так один экран обновляется вместо спама новыми сообщениями.
+    /// </summary>
+    private async Task ShowNavScreenAsync(long chatId, string text, InlineKeyboardMarkup? keyboard, ParseMode parseMode = ParseMode.Markdown)
+    {
+        int? target = null;
+        if (_pendingEditMessageId.TryGetValue(chatId, out var pe)) target = pe;
+        else if (_navMessageId.TryGetValue(chatId, out var nv)) target = nv;
+
+        if (target is int mid)
+        {
+            try
+            {
+                await _botClient.EditMessageTextAsync(chatId, mid, text, parseMode: parseMode, replyMarkup: keyboard);
+                _navMessageId[chatId] = mid;
+                return;
+            }
+            catch (Telegram.Bot.Exceptions.ApiRequestException ex) when (ex.Message.Contains("message is not modified"))
+            {
+                _navMessageId[chatId] = mid; // контент не изменился — экран и так актуален
+                return;
+            }
+            catch
+            {
+                // Не смогли отредактировать (сообщение удалено/это медиа/слишком старое) —
+                // удалим старое и отправим новое.
+                try { await _botClient.DeleteMessageAsync(chatId, mid); } catch { }
+            }
+        }
+
+        var sent = await _botClient.SendTextMessageAsync(chatId, text, parseMode: parseMode, replyMarkup: keyboard, disableNotification: true);
+        _navMessageId[chatId] = sent.MessageId;
     }
 
 
@@ -1185,6 +1213,10 @@ public partial class TelegramBotService
             // Отвечаем на callback query
 
             await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id);
+
+            // Рендер во время обработки callback редактирует именно нажатое сообщение
+            // (единый «живой» экран вместо новых сообщений).
+            _pendingEditMessageId[chatId] = messageId;
 
             Console.WriteLine("✅ Callback query answered");
 
@@ -1356,6 +1388,11 @@ public partial class TelegramBotService
 
             await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Произошла ошибка");
 
+        }
+
+        finally
+        {
+            _pendingEditMessageId.TryRemove(chatId, out _);
         }
 
     }

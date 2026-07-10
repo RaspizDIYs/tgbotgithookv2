@@ -13,6 +13,7 @@ public partial class TelegramBotService
     private async Task SendWelcomeMessageAsync(long chatId)
 
     {
+        _navigationStack.Remove(chatId); // верхнеуровневый экран — сбрасываем цепочку «назад»
 
         var message = @"🤖 *GitHub Monitor Bot*
 
@@ -72,25 +73,14 @@ public partial class TelegramBotService
 
 
 
-        await _botClient.SendTextMessageAsync(
-
-            chatId: chatId,
-
-            text: message,
-
-            parseMode: ParseMode.Markdown,
-
-            disableNotification: true,
-
-            replyMarkup: inlineKeyboard
-
-        );
+        await ShowNavScreenAsync(chatId, message, inlineKeyboard);
 
     }
 
     private async Task SendHelpMessageAsync(long chatId)
 
     {
+        _navigationStack.Remove(chatId); // верхнеуровневый экран — сбрасываем цепочку «назад»
 
         var message = @"📋 *Справка по боту*
 
@@ -123,6 +113,9 @@ public partial class TelegramBotService
 🔥 /streaks - Топ стриков
 🔄 /recalc - Пересчёт статистики
 
+🗂 *Jira:*
+📋 /jira - Дайджест задач KAN (frontend/backend по исполнителям)
+
 🤖 *Gemini AI:*
 ▶️ /glaistart - Включить режим AI
 ⏹️ /glaistop - Выключить режим AI
@@ -130,7 +123,7 @@ public partial class TelegramBotService
 🔍 /glaicurrent - Текущий агент
 🔄 /glaiswitch - Переключить агента
 🧹 /glaiclear - Очистить контекст
-❓ /ask <вопрос> - Разовый вопрос к AI
+❓ /ask <вопрос> - Вопрос к AI (может смотреть коммиты/PR/CI/статистику)
 📝 /tldr - Краткая выжимка обсуждения
 
 ⚙️ *Настройки:*
@@ -185,19 +178,7 @@ public partial class TelegramBotService
 
 
 
-        await _botClient.SendTextMessageAsync(
-
-            chatId: chatId,
-
-            text: message,
-
-            parseMode: ParseMode.Markdown,
-
-            disableNotification: true,
-
-            replyMarkup: inlineKeyboard
-
-        );
+        await ShowNavScreenAsync(chatId, message, inlineKeyboard);
 
     }
 
@@ -369,21 +350,7 @@ help - полный список команд";
 
 
 
-        await _botClient.SendTextMessageAsync(
-
-            chatId: chatId,
-
-            text: message,
-
-            parseMode: ParseMode.Markdown,
-
-            disableWebPagePreview: true,
-
-            disableNotification: true,
-
-            replyMarkup: keyboard
-
-        );
+        await ShowNavScreenAsync(chatId, message, keyboard);
 
     }
 }

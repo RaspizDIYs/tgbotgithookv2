@@ -414,6 +414,25 @@ public partial class TelegramBotService
 
             Console.WriteLine($"✅ {summaryType} summary sent to chat {chatId}");
 
+            // Дайджест Jira отдельным сообщением (если настроена)
+            if (_jiraService.IsConfigured)
+            {
+                try
+                {
+                    var issues = await _jiraService.GetActiveIssuesAsync();
+                    await _botClient.SendTextMessageAsync(
+                        chatId: chatId,
+                        text: _jiraService.BuildDigest(issues),
+                        parseMode: ParseMode.Markdown,
+                        messageThreadId: threadId,
+                        disableNotification: targetChatId.HasValue);
+                }
+                catch (Exception jex)
+                {
+                    Console.WriteLine($"⚠️ Jira digest skipped: {jex.Message}");
+                }
+            }
+
 
 
             // Перепланируем таймер на следующий день только для автоматических сводок

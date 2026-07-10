@@ -130,21 +130,7 @@ public partial class TelegramBotService
 
 
 
-        await _botClient.SendTextMessageAsync(
-
-            chatId: chatId,
-
-            text: message,
-
-            parseMode: ParseMode.Markdown,
-
-            disableWebPagePreview: true,
-
-            disableNotification: true,
-
-            replyMarkup: keyboard
-
-        );
+        await ShowNavScreenAsync(chatId, message, keyboard);
 
     }
 
@@ -224,21 +210,7 @@ public partial class TelegramBotService
 
 
 
-        await _botClient.SendTextMessageAsync(
-
-            chatId: chatId,
-
-            text: message,
-
-            parseMode: ParseMode.Markdown,
-
-            disableWebPagePreview: true,
-
-            disableNotification: true,
-
-            replyMarkup: keyboard
-
-        );
+        await ShowNavScreenAsync(chatId, message, keyboard);
 
     }
 
@@ -298,7 +270,7 @@ public partial class TelegramBotService
 
 
 
-        await _botClient.EditMessageTextAsync(chatId, messageId, message, parseMode: ParseMode.Markdown, replyMarkup: keyboard);
+        await ShowNavScreenAsync(chatId, message, keyboard);
 
     }
 }
