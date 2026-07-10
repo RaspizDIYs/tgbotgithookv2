@@ -60,7 +60,11 @@ public sealed class RepositoryScannerService : BackgroundService
                 ct.ThrowIfCancellationRequested();
                 try
                 {
-                    var history = await _gitHub.GetAllCommitsWithStatsForBranchAsync(branch, 300, includeStats: true);
+                    // includeStats:false — не тянем per-commit статистику (это отдельный
+                    // API-вызов на КАЖДЫЙ коммит → выжигает rate limit при каждом рестарте,
+                    // т.к. DATA_DIR на Render эфемерный и бэкфилл повторяется). Additions/
+                    // Deletions по историческим коммитам всё равно приходят через webhook.
+                    var history = await _gitHub.GetAllCommitsWithStatsForBranchAsync(branch, 300, includeStats: false);
                     foreach (var c in history)
                         _achievements.ProcessCommitIfNew(c.Sha, c.Author, c.Email, c.Message, c.Date, c.Additions, c.Deletions);
                 }
