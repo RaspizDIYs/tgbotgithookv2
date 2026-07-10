@@ -15,6 +15,13 @@ public partial class TelegramBotService
 {
     private const int MaxAgenticSteps = 3;
 
+    // Контекст команды: без него модель принимает «Шпинат» за овощ и т.п.
+    private const string TeamContext =
+        "Контекст: проект goodluckv2. «Шпинат» (Shpinat) — фронтенд-разработчик, " +
+        "«Межайкин» (Mejaikin) — бэкенд-разработчик. Это НИКНЕЙМЫ ЛЮДЕЙ, а не еда/овощи. " +
+        "Вопросы про «задачи Шпината/Межайкина/фронта/бэка» — это задачи из Jira (KAN): " +
+        "бери их через get_jira_issues и раздели по смыслу (frontend/backend).";
+
     private const string ToolCatalog = @"- get_recent_commits(branch?: string, count?: int=10) — последние коммиты. НЕ указывай branch, если пользователь явно не назвал ветку — бот сам возьмёт дефолтную (master).
 - get_repo_status() — общий статус репозитория
 - get_branches() — список веток
@@ -45,12 +52,15 @@ public partial class TelegramBotService
         string answer;
         if (collected.Length == 0)
         {
-            // Инструменты не понадобились — обычный ответ модели.
-            answer = await _geminiManager.GenerateResponseAsync(question);
+            // Инструменты не понадобились — прямой ответ, но через guard-путь
+            // (русский, без дрейфа) и с контекстом команды.
+            var directPrompt = $"{TeamContext}\n\nВопрос: \"{question}\"\n\nОтветь кратко на русском по существу.";
+            answer = await _geminiManager.GenerateRawResponseAsync(directPrompt);
         }
         else
         {
             var finalPrompt =
+                $"{TeamContext}\n\n" +
                 $"Пользователь спросил: \"{question}\"\n\n" +
                 $"Данные, собранные инструментами бота:\n{collected}\n" +
                 "Ответь пользователю по-русски: кратко и по делу, суммаризируй данные. " +
@@ -69,6 +79,8 @@ public partial class TelegramBotService
         var sb = new StringBuilder();
         sb.AppendLine("Ты — планировщик агента в Telegram-боте по GitHub-репозиторию. Доступные инструменты (только чтение):");
         sb.AppendLine(ToolCatalog);
+        sb.AppendLine();
+        sb.AppendLine(TeamContext);
         sb.AppendLine();
         sb.AppendLine($"Вопрос пользователя: \"{question}\"");
         if (!string.IsNullOrWhiteSpace(collectedSoFar))
