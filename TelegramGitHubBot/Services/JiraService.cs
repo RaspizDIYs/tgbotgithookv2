@@ -29,6 +29,9 @@ public sealed class JiraService
     private readonly string[] _backendUsers;
 
     public bool IsConfigured => _auth != null && !string.IsNullOrEmpty(_baseUrl);
+    public string ProjectKey => _project;
+    public string FrontendLabel => _frontendUsers.FirstOrDefault() ?? "Frontend";
+    public string BackendLabel => _backendUsers.FirstOrDefault() ?? "Backend";
 
     public JiraService(HttpClient http, IConfiguration cfg)
     {
@@ -120,36 +123,5 @@ public sealed class JiraService
         if (_frontendUsers.Any(u => who.Contains(u, StringComparison.OrdinalIgnoreCase))) return "frontend";
         if (_backendUsers.Any(u => who.Contains(u, StringComparison.OrdinalIgnoreCase))) return "backend";
         return "other";
-    }
-
-    /// <summary>Строит текст дайджеста (Markdown) по списку задач.</summary>
-    public string BuildDigest(List<JiraIssue> issues)
-    {
-        if (!IsConfigured)
-            return "🗂 Jira не настроена (задайте JIRA_EMAIL / JIRA_API_TOKEN).";
-        if (issues.Count == 0)
-            return $"🗂 *{_project}* — активных задач нет 🎉";
-
-        var frontend = issues.Where(i => RoleOf(i) == "frontend").ToList();
-        var backend = issues.Where(i => RoleOf(i) == "backend").ToList();
-        var other = issues.Where(i => RoleOf(i) == "other").ToList();
-
-        var sb = new StringBuilder();
-        sb.AppendLine($"🗂 *{_project}* — активных задач: *{issues.Count}*");
-        sb.AppendLine();
-        AppendGroup(sb, "🖥 Frontend", _frontendUsers.FirstOrDefault(), frontend);
-        AppendGroup(sb, "⚙️ Backend", _backendUsers.FirstOrDefault(), backend);
-        if (other.Count > 0)
-            AppendGroup(sb, "❔ Прочее/без исполнителя", null, other);
-        return sb.ToString().TrimEnd();
-    }
-
-    private static void AppendGroup(StringBuilder sb, string label, string? who, List<JiraIssue> group)
-    {
-        var title = who != null ? $"{label} · {who}" : label;
-        sb.AppendLine($"{title} — *{group.Count}*");
-        if (group.Count > 0)
-            sb.AppendLine(string.Join(", ", group.Select(i => i.Key)));
-        sb.AppendLine();
     }
 }

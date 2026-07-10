@@ -419,10 +419,9 @@ public partial class TelegramBotService
             {
                 try
                 {
-                    var issues = await _jiraService.GetActiveIssuesAsync();
                     await _botClient.SendTextMessageAsync(
                         chatId: chatId,
-                        text: _jiraService.BuildDigest(issues),
+                        text: await BuildJiraDigestAsync(),
                         parseMode: ParseMode.Markdown,
                         messageThreadId: threadId,
                         disableNotification: targetChatId.HasValue);
