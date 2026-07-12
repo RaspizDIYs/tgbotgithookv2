@@ -18,6 +18,7 @@ public sealed class ScheduledReportsService : BackgroundService
     private readonly IConfiguration _cfg;
     private readonly ILogger<ScheduledReportsService> _logger;
     private readonly string _statePath;
+    private readonly DateTime _startedAtMsk;
 
     private string _lastStaleDate = "";
     private string _lastMonthlyMonth = "";
@@ -34,8 +35,21 @@ public sealed class ScheduledReportsService : BackgroundService
         if (string.IsNullOrWhiteSpace(dir)) dir = Path.Combine(AppContext.BaseDirectory, "data");
         try { Directory.CreateDirectory(dir); } catch { }
         _statePath = Path.Combine(dir, "reports_state.json");
+        _startedAtMsk = DateTime.UtcNow.AddHours(3);
         LoadState();
     }
+
+    /// <summary>
+    /// DATA_DIR на Render эфемерный без persistent disk — reports_state.json не
+    /// переживает рестарт (а рестартует бот при каждом деплое/мердже). Без этой
+    /// защиты процесс, поднявшийся УЖЕ ПОСЛЕ часа отправки, считает "ещё не слал
+    /// сегодня" и шлёт повторно — отсюда спам "Зависшие задачи" по несколько раз
+    /// в день при частых деплоях. Разрешаем автослать только если процесс живёт с
+    /// момента до часа X сегодня (или поднялся ещё вчера) — то есть застал реальный
+    /// переход через порог, а не бывший рестарт-после-порога.
+    /// </summary>
+    private bool CrossedThresholdWhileRunning(DateTime now, int hour) =>
+        _startedAtMsk.Date < now.Date || _startedAtMsk.Hour < hour;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -56,24 +70,44 @@ public sealed class ScheduledReportsService : BackgroundService
         var month = now.ToString("yyyy-MM");
 
         // Зависшие задачи — ежедневно в STALE_HOUR
-        if (Bool("STALE_ENABLED", true) && now.Hour >= Int("STALE_HOUR", 10) && _lastStaleDate != today)
+        var staleHour = Int("STALE_HOUR", 10);
+        if (Bool("STALE_ENABLED", true) && now.Hour >= staleHour && _lastStaleDate != today)
         {
-            var chat = ChatId("STALE_CHAT_ID");
-            if (chat != 0)
+            if (!CrossedThresholdWhileRunning(now, staleHour))
             {
-                await SendAsync(chat, ThreadId("STALE_THREAD_ID"), await _bot.BuildStaleTasksAsync(), "stale");
+                _logger.LogInformation(
+                    "stale: пропуск автослания — процесс поднялся сегодня в {StartedHour}ч, порог {Hour}ч уже прошёл " +
+                    "(вероятно рестарт от деплоя, а не первый проход через час X)", _startedAtMsk.Hour, staleHour);
             }
-            _lastStaleDate = today; // помечаем даже без чата, чтобы не долбить билд каждый тик
+            else
+            {
+                var chat = ChatId("STALE_CHAT_ID");
+                if (chat != 0)
+                {
+                    await SendAsync(chat, ThreadId("STALE_THREAD_ID"), await _bot.BuildStaleTasksAsync(), "stale");
+                }
+            }
+            _lastStaleDate = today; // помечаем в обоих случаях, чтобы не долбить билд каждый тик
             SaveState();
         }
 
         // Месячная сводка — 1-го числа в MONTHLY_HOUR
-        if (Bool("MONTHLY_ENABLED", true) && now.Day == 1 && now.Hour >= Int("MONTHLY_HOUR", 10) && _lastMonthlyMonth != month)
+        var monthlyHour = Int("MONTHLY_HOUR", 10);
+        if (Bool("MONTHLY_ENABLED", true) && now.Day == 1 && now.Hour >= monthlyHour && _lastMonthlyMonth != month)
         {
-            var chat = ChatId("MONTHLY_CHAT_ID");
-            if (chat != 0)
+            if (!CrossedThresholdWhileRunning(now, monthlyHour))
             {
-                await SendAsync(chat, ThreadId("MONTHLY_THREAD_ID"), await _bot.BuildMonthlySummaryAsync(), "monthly");
+                _logger.LogInformation(
+                    "monthly: пропуск автослания — процесс поднялся сегодня в {StartedHour}ч, порог {Hour}ч уже прошёл",
+                    _startedAtMsk.Hour, monthlyHour);
+            }
+            else
+            {
+                var chat = ChatId("MONTHLY_CHAT_ID");
+                if (chat != 0)
+                {
+                    await SendAsync(chat, ThreadId("MONTHLY_THREAD_ID"), await _bot.BuildMonthlySummaryAsync(), "monthly");
+                }
             }
             _lastMonthlyMonth = month;
             SaveState();
